@@ -1250,10 +1250,12 @@
 
             // 先扫描 Row 0 确定各表格的列起始位置
             let colError = -1, colTime = -1, colMonthlyVol = -1, colTimeDist = -1;
+            console.log('GL data[0] length:', data[0] ? data[0].length : 'null');
             if (data[0]) {
                 for (let c = 0; c < data[0].length; c++) {
                     if (data[0][c] == null) continue;
                     const val = String(data[0][c]).trim();
+                    console.log('GL col', c, 'value:', val);
                     if (val.includes('GL错误入账') && colError === -1) colError = c;
                     if (val.includes('GL结账时间') && colTime === -1) colTime = c;
                     if (val.includes('GL月度账务量') && colMonthlyVol === -1) colMonthlyVol = c;
@@ -1261,9 +1263,6 @@
                 }
             }
             console.log('GL columns detected - Error:', colError, 'Time:', colTime, 'MonthlyVol:', colMonthlyVol, 'TimeDist:', colTimeDist);
-            console.log('GL data row 0:', data[0]);
-            console.log('GL data row 1:', data[1]);
-            console.log('GL data row 2:', data[2]);
 
             // 1. GL错误入账事项
             dashboardData.glError.months = [];
