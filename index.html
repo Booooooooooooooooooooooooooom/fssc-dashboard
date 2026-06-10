@@ -657,8 +657,9 @@
             if (yearlyIdx >= 0) {
                 for (let r = yearlyIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
+                    if (!row || row[0] == null) continue; // 跳过空行
                     const label = String(row[0]).trim();
+                    if (label === '') continue;
                     if (label.includes('月单据量') || label.includes('Productivity') || label.includes('已预付')) break;
                     if (label === '合计' || label === '总计' || label === 'Total') continue;
                     dashboardData.apYearly.years.push(label.replace('年',''));
@@ -676,8 +677,9 @@
                 dashboardData.apMonthly.data2026 = [];
                 for (let r = monthlyIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
+                    if (!row || row[0] == null) continue; // 跳过空行
                     const label = String(row[0]).trim();
+                    if (label === '') continue;
                     if (label.includes('合计') || label.includes('Productivity') || label.includes('已预付')) break;
                     dashboardData.apMonthly.months.push(label);
                     dashboardData.apMonthly.data2023.push(row[1] != null ? parseFloat(row[1]) : null);
@@ -697,8 +699,9 @@
                 dashboardData.apProductivity.data2026 = [];
                 for (let r = prodIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
+                    if (!row || row[0] == null) continue; // 跳过空行
                     const label = String(row[0]).trim();
+                    if (label === '') continue;
                     if (label.includes('已预付')) break;
                     dashboardData.apProductivity.months.push(label);
                     dashboardData.apProductivity.data2023.push(row[1] != null ? parseFloat(row[1]) : null);
@@ -716,8 +719,11 @@
                 dashboardData.apPrepaidByHospital.counts = [];
                 for (let r = hospitalIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
-                    dashboardData.apPrepaidByHospital.hospitals.push(String(row[0]));
+                    if (!row || row[0] == null) continue; // 跳过空行
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    if (label.includes('已预付未收货按区间') || label.includes('已预付未收货清理')) break;
+                    dashboardData.apPrepaidByHospital.hospitals.push(label);
                     dashboardData.apPrepaidByHospital.counts.push(parseFloat(row[1]) || 0);
                     const amt = row[2] != null ? String(row[2]).trim() : '';
                     dashboardData.apPrepaidByHospital.amounts.push(amt.endsWith('M') ? parseFloat(amt.slice(0, -1)) : parseFloat(amt) || 0);
@@ -732,8 +738,11 @@
                 dashboardData.apPrepaidByRange.counts = [];
                 for (let r = rangeIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
-                    dashboardData.apPrepaidByRange.ranges.push(String(row[0]));
+                    if (!row || row[0] == null) continue; // 跳过空行
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    if (label.includes('已预付未收货清理')) break;
+                    dashboardData.apPrepaidByRange.ranges.push(label);
                     dashboardData.apPrepaidByRange.counts.push(parseFloat(row[1]) || 0);
                     const amt = row[2] != null ? String(row[2]).trim() : '';
                     dashboardData.apPrepaidByRange.amounts.push(amt.endsWith('M') ? parseFloat(amt.slice(0, -1)) : parseFloat(amt) || 0);
@@ -749,8 +758,10 @@
                 dashboardData.apPrepaidByPerson.clearRates = [];
                 for (let r = personIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
-                    dashboardData.apPrepaidByPerson.persons.push(String(row[0]));
+                    if (!row || row[0] == null) continue; // 跳过空行
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    dashboardData.apPrepaidByPerson.persons.push(label);
                     const openAmt = row[1] != null ? String(row[1]).trim() : '';
                     dashboardData.apPrepaidByPerson.amounts.push(openAmt.endsWith('M') ? parseFloat(openAmt.slice(0, -1)) : parseFloat(openAmt) || 0);
                     const clearedAmt = row[2] != null ? String(row[2]).trim() : '';
@@ -768,8 +779,9 @@
             dashboardData.treasuryPayment.offline = [];
             for (let r = 18; r < data.length; r++) {
                 const row = data[r];
-                if (!row || row[0] == null) break;
+                if (!row || row[0] == null) continue;
                 const label = String(row[0]).trim();
+                if (label === '') continue;
                 if (label === '合计') break;
                 dashboardData.treasuryPayment.categories.push(label);
                 dashboardData.treasuryPayment.online.push(parseFloat(row[1]) || 0);
@@ -780,8 +792,9 @@
             dashboardData.treasuryDelay.values = [];
             for (let r = 2; r < data.length; r++) {
                 const row = data[r];
-                if (!row || row[8] == null) break;
+                if (!row || row[8] == null) continue;
                 const label = String(row[8]).trim();
+                if (label === '') continue;
                 if (label.includes('按年统计') || label.includes('线下付款')) break;
                 dashboardData.treasuryDelay.months.push(label);
                 dashboardData.treasuryDelay.values.push(parseFloat(row[9]) || 0);
@@ -832,8 +845,10 @@
                 dashboardData.treasuryOfflineCategory.values = [];
                 for (let r = offlineIdx + 1; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[8] == null) break;
-                    if (String(row[8]).trim() === '类型') continue;
+                    if (!row || row[8] == null) continue;
+                    const label = String(row[8]).trim();
+                    if (label === '') continue;
+                    if (label === '类型') continue;
                     dashboardData.treasuryOfflineCategory.categories.push(String(row[8]).trim());
                     dashboardData.treasuryOfflineCategory.values.push(parseFloat(row[9]) || 0);
                 }
@@ -851,8 +866,10 @@
                 dashboardData.treasuryDelayCategory.values = [];
                 for (let r = delayCatIdx + 1; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[8] == null) break;
-                    if (String(row[8]).trim() === '不按期支付说明') continue;
+                    if (!row || row[8] == null) continue;
+                    const label = String(row[8]).trim();
+                    if (label === '') continue;
+                    if (label === '不按期支付说明') continue;
                     dashboardData.treasuryDelayCategory.categories.push(String(row[8]).trim());
                     dashboardData.treasuryDelayCategory.values.push(parseFloat(row[9]) || 0);
                 }
@@ -902,8 +919,10 @@
                 dashboardData.settlementDistribution.late = [];
                 for (let r = distIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
-                    dashboardData.settlementDistribution.months.push(String(row[0]));
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    dashboardData.settlementDistribution.months.push(label);
                     dashboardData.settlementDistribution.early.push(parseFloat(row[1]) || 0);
                     dashboardData.settlementDistribution.mid.push(parseFloat(row[2]) || 0);
                     dashboardData.settlementDistribution.late.push(parseFloat(row[3]) || 0);
@@ -925,8 +944,10 @@
                 dashboardData.settlementMonthly.data2026 = [];
                 for (let r = monthlyIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
-                    if (String(row[0]).trim() === 'Total') break;
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    if (label === 'Total') break;
                     dashboardData.settlementMonthly.months.push(String(row[0]).trim());
                     dashboardData.settlementMonthly.data2023.push(row[1] != null && row[1] !== '' ? parseFloat(row[1]) : null);
                     dashboardData.settlementMonthly.data2024.push(row[2] != null && row[2] !== '' ? parseFloat(row[2]) : null);
@@ -983,8 +1004,9 @@
                 // 读取每个年度的数据行
                 for (let r = amountYearlyIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
+                    if (!row || row[0] == null) continue;
                     const yearLabel = String(row[0]).trim();
+                    if (yearLabel === '') continue;
                     const seriesData = [];
                     for (let c = 2; c < amtHeaderRow.length; c++) {
                         const val = row[c] != null ? String(row[c]).trim() : '';
@@ -1015,8 +1037,9 @@
                 dashboardData.settlementURCountYearly.series = [];
                 for (let r = countYearlyIdx + 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) break;
+                    if (!row || row[0] == null) continue;
                     const yearLabel = String(row[0]).trim();
+                    if (yearLabel === '') continue;
                     const seriesData = [];
                     for (let c = 2; c < cntHeaderRow.length; c++) {
                         seriesData.push(parseFloat(row[c]) || 0);
@@ -1173,8 +1196,9 @@
             dashboardData.collectionC.rate = [];
             for (let r = 2; r < data.length; r++) {
                 const row = data[r];
-                if (!row || row[0] == null) break;
+                if (!row || row[0] == null) continue;
                 const label = String(row[0]).trim();
+                if (label === '') continue;
                 if (label.includes('呼入') || label.includes('呼出') || label.includes('AI')) break;
                 dashboardData.collectionC.months.push(label);
                 dashboardData.collectionC.calls.push(parseFloat(row[1]) || 0);
@@ -1186,8 +1210,9 @@
             dashboardData.collectionCIn.rate = [];
             for (let r = 2; r < data.length; r++) {
                 const row = data[r];
-                if (!row || row[5] == null) break;
+                if (!row || row[5] == null) continue;
                 const label = String(row[5]).trim();
+                if (label === '') continue;
                 if (label.includes('呼出') || label.includes('AI')) break;
                 dashboardData.collectionCIn.months.push(label);
                 dashboardData.collectionCIn.connected.push(parseFloat(row[6]) || 0);
@@ -1208,8 +1233,9 @@
             if (outStartIdx < 0) outStartIdx = 20;
             for (let r = outStartIdx; r < data.length; r++) {
                 const row = data[r];
-                if (!row || row[5] == null) break;
+                if (!row || row[5] == null) continue;
                 const label = String(row[5]).trim();
+                if (label === '') continue;
                 if (label.includes('AI') || label.includes('合计')) break;
                 dashboardData.collectionCOut.months.push(label);
                 dashboardData.collectionCOut.connected.push(parseFloat(row[6]) || 0);
@@ -1230,8 +1256,10 @@
             if (aiStartIdx < 0) aiStartIdx = 38;
             for (let r = aiStartIdx; r < data.length; r++) {
                 const row = data[r];
-                if (!row || row[5] == null) break;
-                dashboardData.collectionCAI.months.push(String(row[5]));
+                if (!row || row[5] == null) continue;
+                const label = String(row[5]).trim();
+                if (label === '') continue;
+                dashboardData.collectionCAI.months.push(label);
                 dashboardData.collectionCAI.connected.push(parseFloat(row[6]) || 0);
                 dashboardData.collectionCAI.missed.push(parseFloat(row[7]) || 0);
                 dashboardData.collectionCAI.rate.push((parseFloat(row[9]) || 0) * 100);
@@ -1248,27 +1276,18 @@
             // Row 1: 子表头行
             // Row 2+: 数据行
 
-            console.log('parseGLData called, data type:', typeof data, 'isArray:', Array.isArray(data), 'length:', data ? data.length : 'null');
-            if (!Array.isArray(data) || data.length === 0) {
-                console.error('parseGLData: data is not a valid array');
-                return;
-            }
-
             // 先扫描 Row 0 确定各表格的列起始位置
             let colError = -1, colTime = -1, colMonthlyVol = -1, colTimeDist = -1;
-            console.log('GL data[0] length:', data[0] ? data[0].length : 'null');
             if (data[0]) {
                 for (let c = 0; c < data[0].length; c++) {
                     if (data[0][c] == null) continue;
                     const val = String(data[0][c]).trim();
-                    console.log('GL col', c, 'value:', val);
                     if (val.includes('GL错误入账') && colError === -1) colError = c;
                     if (val.includes('GL结账时间') && colTime === -1) colTime = c;
                     if (val.includes('GL月度账务量') && colMonthlyVol === -1) colMonthlyVol = c;
                     if (val.includes('月度分时段处理账务分布') && colTimeDist === -1) colTimeDist = c;
                 }
             }
-            console.log('GL columns detected - Error:', colError, 'Time:', colTime, 'MonthlyVol:', colMonthlyVol, 'TimeDist:', colTimeDist);
 
             // 1. GL错误入账事项
             dashboardData.glError.months = [];
@@ -1276,10 +1295,10 @@
             if (colError >= 0) {
                 for (let r = 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row) break;
+                    if (!row) continue;
                     if (row[colError] != null) {
                         const label = String(row[colError]).trim();
-                        if (label === '') break;
+                        if (label === '') continue;
                         dashboardData.glError.months.push(label);
                         dashboardData.glError.count.push(parseFloat(row[colError + 1]) || 0);
                     }
@@ -1292,10 +1311,10 @@
             if (colTime >= 0) {
                 for (let r = 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row) break;
+                    if (!row) continue;
                     if (row[colTime] != null) {
                         const label = String(row[colTime]).trim();
-                        if (label === '') break;
+                        if (label === '') continue;
                         dashboardData.glTime.months.push(label);
                         dashboardData.glTime.days.push(parseFloat(row[colTime + 1]) || 0);
                     }
@@ -1312,10 +1331,10 @@
             if (colMonthlyVol >= 0) {
                 for (let r = 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row.length <= colMonthlyVol) break;
+                    if (!row || row.length <= colMonthlyVol) continue;
                     if (row[colMonthlyVol] != null && row[colMonthlyVol] !== undefined) {
                         const label = String(row[colMonthlyVol]).trim();
-                        if (label === '' || label === 'null') break;
+                        if (label === '' || label === 'null') continue;
                         dashboardData.glMonthlyVolume.months.push(label);
                         dashboardData.glMonthlyVolume.daily.push(row[colMonthlyVol + 1] != null ? parseFloat(row[colMonthlyVol + 1]) : 0);
                         dashboardData.glMonthlyVolume.preClose.push(row[colMonthlyVol + 2] != null ? parseFloat(row[colMonthlyVol + 2]) : 0);
@@ -1325,7 +1344,6 @@
                     }
                 }
             }
-            console.log('GL MonthlyVolume:', JSON.stringify(dashboardData.glMonthlyVolume));
 
             // 4. 月度分时段处理账务分布
             dashboardData.glTimeDistribution.months = [];
@@ -1336,10 +1354,10 @@
             if (colTimeDist >= 0) {
                 for (let r = 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row.length <= colTimeDist) break;
+                    if (!row || row.length <= colTimeDist) continue;
                     if (row[colTimeDist] != null && row[colTimeDist] !== undefined) {
                         const label = String(row[colTimeDist]).trim();
-                        if (label === '' || label === 'null') break;
+                        if (label === '' || label === 'null') continue;
                         dashboardData.glTimeDistribution.months.push(label);
                         dashboardData.glTimeDistribution.daily.push(row[colTimeDist + 1] != null ? parseFloat(row[colTimeDist + 1]) : 0);
                         dashboardData.glTimeDistribution.preClose.push(row[colTimeDist + 2] != null ? parseFloat(row[colTimeDist + 2]) : 0);
@@ -1348,7 +1366,6 @@
                     }
                 }
             }
-            console.log('GL TimeDistribution:', JSON.stringify(dashboardData.glTimeDistribution));
         }
         
         function updateKPIs() {
