@@ -1248,6 +1248,12 @@
             // Row 1: 子表头行
             // Row 2+: 数据行
 
+            console.log('parseGLData called, data type:', typeof data, 'isArray:', Array.isArray(data), 'length:', data ? data.length : 'null');
+            if (!Array.isArray(data) || data.length === 0) {
+                console.error('parseGLData: data is not a valid array');
+                return;
+            }
+
             // 先扫描 Row 0 确定各表格的列起始位置
             let colError = -1, colTime = -1, colMonthlyVol = -1, colTimeDist = -1;
             console.log('GL data[0] length:', data[0] ? data[0].length : 'null');
