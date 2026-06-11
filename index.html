@@ -773,68 +773,68 @@
 
         // ========== Treasury Sheet ==========
         function parseTreasuryData(data) {
-            // 区域1: Treasury付款方式 / 付款方式统计 / 银企直连
-            const r1 = findRowIndex(data, ['Treasury付款方式', '付款方式统计', '银企直连'], 0);
-            if (r1 >= 0) {
-                dashboardData.treasuryPayment.categories = [];
-                dashboardData.treasuryPayment.online = [];
-                dashboardData.treasuryPayment.offline = [];
-                for (let r = r1 + 1; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[0] == null) continue;
-                    const label = String(row[0]).trim();
-                    if (label === '' || label === '合计') continue;
-                    if (findRowIndex(data, ['Treasury付款情况', '付款情况统计'], r) === r) break;
-                    if (findRowIndex(data, ['不按期支付分类'], r) === r) break;
-                    dashboardData.treasuryPayment.categories.push(label);
-                    dashboardData.treasuryPayment.online.push(parseFloat(row[1]) || 0);
-                    dashboardData.treasuryPayment.offline.push(parseFloat(row[2]) || 0);
+            // 扫描 Row 0 确定各区域的列位置
+            let colPayment = -1, colDelay = -1;
+            if (data[0]) {
+                for (let c = 0; c < data[0].length; c++) {
+                    if (data[0][c] == null) continue;
+                    const val = String(data[0][c]).trim();
+                    if (val.includes('付款按年统计') && colPayment === -1) colPayment = c;
+                    if (val.includes('不按期支付') && colDelay === -1) colDelay = c;
                 }
             }
 
-            // 区域2: Treasury付款情况 / 付款情况统计
-            const r2 = findRowIndex(data, ['Treasury付款情况', '付款情况统计'], r1 >= 0 ? r1 + 1 : 0);
+            // 区域1: 付款按年统计 (Col 0-4)
+            dashboardData.treasuryPayment.categories = [];
+            dashboardData.treasuryPayment.online = [];
+            dashboardData.treasuryPayment.offline = [];
+            if (colPayment >= 0) {
+                for (let r = 2; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row.length <= colPayment) continue;
+                    if (row[colPayment] != null) {
+                        const label = String(row[colPayment]).trim();
+                        if (label === '' || label === '合计') break;
+                        dashboardData.treasuryPayment.categories.push(label);
+                        dashboardData.treasuryPayment.online.push(row[colPayment + 1] != null ? parseFloat(row[colPayment + 1]) : 0);
+                        dashboardData.treasuryPayment.offline.push(row[colPayment + 2] != null ? parseFloat(row[colPayment + 2]) : 0);
+                    }
+                }
+            }
+
+            // 区域2: Treasury付款情况统计 (动态查找)
+            const r2 = findRowIndex(data, ['Treasury付款情况', '付款情况统计'], 0);
             if (r2 >= 0) {
                 dashboardData.treasuryAnnualPayment.years = [];
                 dashboardData.treasuryAnnualPayment.online = [];
                 dashboardData.treasuryAnnualPayment.offline = [];
-                for (let r = r2 + 1; r < data.length; r++) {
+                for (let r = r2 + 2; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '' || label === '合计') continue;
-                    if (findRowIndex(data, ['不按期支付分类'], r) === r) break;
+                    if (label.includes('线下付款明细')) break;
                     dashboardData.treasuryAnnualPayment.years.push(label);
                     dashboardData.treasuryAnnualPayment.online.push(parseFloat(row[1]) || 0);
                     dashboardData.treasuryAnnualPayment.offline.push(parseFloat(row[2]) || 0);
                 }
             }
 
-            // 区域3: 不按期支付分类 (列I-J)
-            const r3 = findRowIndex(data, ['不按期支付分类'], r2 >= 0 ? r2 + 1 : 0);
-            if (r3 >= 0) {
-                dashboardData.treasuryDelayCategory.categories = [];
-                dashboardData.treasuryDelayCategory.values = [];
-                for (let r = r3 + 1; r < data.length; r++) {
+            // 区域3: 不按期支付 (Col 8-9)
+            dashboardData.treasuryDelayCategory.categories = [];
+            dashboardData.treasuryDelayCategory.values = [];
+            if (colDelay >= 0) {
+                for (let r = 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row) continue;
-                    // 查找包含数据的列（可能在I-J或A-B）
-                    let label = '', val = null, found = false;
-                    for (let c = 0; c < row.length; c++) {
-                        if (row[c] != null) {
-                            const s = String(row[c]).trim();
-                            if (s !== '' && s !== '不按期支付说明' && !found) {
-                                label = s;
-                                found = true;
-                            } else if (found && val === null) {
-                                val = parseFloat(row[c]) || 0;
-                                break;
-                            }
+                    if (!row || row.length <= colDelay) continue;
+                    if (row[colDelay] != null) {
+                        const label = String(row[colDelay]).trim();
+                        if (label === '' || label === '月份') continue;
+                        const val = row[colDelay + 1] != null ? parseFloat(row[colDelay + 1]) : null;
+                        if (val !== null) {
+                            dashboardData.treasuryDelayCategory.categories.push(label);
+                            dashboardData.treasuryDelayCategory.values.push(val);
                         }
-                    }
-                    if (label && val !== null) {
-                        dashboardData.treasuryDelayCategory.categories.push(label);
-                        dashboardData.treasuryDelayCategory.values.push(val);
                     }
                 }
             }
@@ -953,8 +953,8 @@
 
         // ========== Billing Sheet ==========
         function parseBillingData(data) {
-            // 区域1: Billing账单接收 / 账单接收方式
-            const r1 = findRowIndex(data, ['Billing账单接收', '账单接收方式'], 0);
+            // 区域1: Billing年度账单寄送 / 账单寄送情况
+            const r1 = findRowIndex(data, ['Billing年度账单', '账单寄送情况', 'Billing账单接收'], 0);
             if (r1 >= 0) {
                 dashboardData.billingYearly.years = ['2023', '2024', '2025', '2026'];
                 dashboardData.billingYearly.edi = [];
@@ -962,7 +962,7 @@
                 dashboardData.billingYearly.email = [];
                 dashboardData.billingYearly.sftp = [];
                 dashboardData.billingYearly.total = [];
-                for (let r = r1; r < data.length; r++) {
+                for (let r = r1 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
@@ -1116,7 +1116,7 @@
                 dashboardData.collectionC.months = [];
                 dashboardData.collectionC.calls = [];
                 dashboardData.collectionC.rate = [];
-                for (let r = r1; r < data.length; r++) {
+                for (let r = r1 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1136,7 +1136,7 @@
                 dashboardData.collectionCIn.connected = [];
                 dashboardData.collectionCIn.missed = [];
                 dashboardData.collectionCIn.rate = [];
-                for (let r = r2; r < data.length; r++) {
+                for (let r = r2 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[5] == null) continue;
                     const label = String(row[5]).trim();
@@ -1156,7 +1156,7 @@
                 dashboardData.collectionCAI.connected = [];
                 dashboardData.collectionCAI.missed = [];
                 dashboardData.collectionCAI.rate = [];
-                for (let r = r3; r < data.length; r++) {
+                for (let r = r3 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[5] == null) continue;
                     const label = String(row[5]).trim();
@@ -1171,88 +1171,76 @@
 
         // ========== GL Sheet ==========
         function parseGLData(data) {
-            // 区域1: GL月结调整 / 月结调整次数
-            const r1 = findRowIndex(data, ['GL月结调整', '月结调整次数'], 0);
-            if (r1 >= 0) {
-                dashboardData.glError.months = [];
-                dashboardData.glError.count = [];
-                for (let r = r1; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[0] == null) continue;
-                    const label = String(row[0]).trim();
-                    if (label === '') continue;
-                    if (findRowIndex(data, ['GL月结工时', '月结工时'], r) === r) break;
-                    if (findRowIndex(data, ['月结工时占比', '工时占比'], r) === r) break;
-                    dashboardData.glError.months.push(label);
-                    dashboardData.glError.count.push(parseFloat(row[1]) || 0);
+            // 扫描 Row 0 确定各区域的列位置
+            let colError = -1, colMonthlyVol = -1, colTimeDist = -1;
+            if (data[0]) {
+                for (let c = 0; c < data[0].length; c++) {
+                    if (data[0][c] == null) continue;
+                    const val = String(data[0][c]).trim();
+                    if (val.includes('GL错误入账') && colError === -1) colError = c;
+                    if (val.includes('GL月度账务量') && colMonthlyVol === -1) colMonthlyVol = c;
+                    if (val.includes('月度分时段处理账务分布') && colTimeDist === -1) colTimeDist = c;
                 }
             }
 
-            // 区域2: GL月结工时 / 月结工时 (列D-I)
-            const r2 = findRowIndex(data, ['GL月结工时', '月结工时'], r1 >= 0 ? r1 + 1 : 0);
-            if (r2 >= 0) {
-                dashboardData.glTime.months = [];
-                dashboardData.glTime.days = [];
-                for (let r = r2; r < data.length; r++) {
+            // 区域1: GL错误入账事项 (Col 0-1)
+            dashboardData.glError.months = [];
+            dashboardData.glError.count = [];
+            if (colError >= 0) {
+                for (let r = 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[3] == null) continue;
-                    const label = String(row[3]).trim();
-                    if (label === '') continue;
-                    if (findRowIndex(data, ['月结工时占比', '工时占比'], r) === r) break;
-                    dashboardData.glTime.months.push(label);
-                    dashboardData.glTime.days.push(parseFloat(row[4]) || 0);
-                }
-            }
-
-            // 区域3: GL月度账务量 (列A-E)
-            const r3 = findRowIndex(data, ['GL月度账务量'], r2 >= 0 ? r2 + 1 : 0);
-            if (r3 >= 0) {
-                dashboardData.glMonthlyVolume.months = [];
-                dashboardData.glMonthlyVolume.daily = [];
-                dashboardData.glMonthlyVolume.preClose = [];
-                dashboardData.glMonthlyVolume.duringClose = [];
-                dashboardData.glMonthlyVolume.postClose = [];
-                dashboardData.glMonthlyVolume.total = [];
-                for (let r = r3; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[0] == null) continue;
-                    const label = String(row[0]).trim();
-                    if (label === '') continue;
-                    if (findRowIndex(data, ['月度分时段处理账务分布'], r) === r) break;
-                    dashboardData.glMonthlyVolume.months.push(label);
-                    dashboardData.glMonthlyVolume.daily.push(row[1] != null ? parseFloat(row[1]) : 0);
-                    dashboardData.glMonthlyVolume.preClose.push(row[2] != null ? parseFloat(row[2]) : 0);
-                    dashboardData.glMonthlyVolume.duringClose.push(row[3] != null ? parseFloat(row[3]) : 0);
-                    if (row.length > 4 && row[4] != null) {
-                        dashboardData.glMonthlyVolume.postClose.push(parseFloat(row[4]) || 0);
-                    } else {
-                        dashboardData.glMonthlyVolume.postClose.push(0);
+                    if (!row || row.length <= colError) continue;
+                    if (row[colError] != null) {
+                        const label = String(row[colError]).trim();
+                        if (label === '') break;
+                        dashboardData.glError.months.push(label);
+                        dashboardData.glError.count.push(parseFloat(row[colError + 1]) || 0);
                     }
-                    dashboardData.glMonthlyVolume.total.push(0);
                 }
             }
 
-            // 区域4: 月度分时段处理账务分布
-            const r4 = findRowIndex(data, ['月度分时段处理账务分布'], r3 >= 0 ? r3 + 1 : 0);
-            if (r4 >= 0) {
-                dashboardData.glTimeDistribution.months = [];
-                dashboardData.glTimeDistribution.daily = [];
-                dashboardData.glTimeDistribution.preClose = [];
-                dashboardData.glTimeDistribution.duringClose = [];
-                dashboardData.glTimeDistribution.postClose = [];
-                for (let r = r4; r < data.length; r++) {
+            // 区域2: GL月度账务量 (Col 3-8)
+            dashboardData.glMonthlyVolume.months = [];
+            dashboardData.glMonthlyVolume.daily = [];
+            dashboardData.glMonthlyVolume.preClose = [];
+            dashboardData.glMonthlyVolume.duringClose = [];
+            dashboardData.glMonthlyVolume.postClose = [];
+            dashboardData.glMonthlyVolume.total = [];
+            if (colMonthlyVol >= 0) {
+                for (let r = 2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) continue;
-                    const label = String(row[0]).trim();
-                    if (label === '') continue;
-                    dashboardData.glTimeDistribution.months.push(label);
-                    dashboardData.glTimeDistribution.daily.push(row[1] != null ? parseFloat(row[1]) : 0);
-                    dashboardData.glTimeDistribution.preClose.push(row[2] != null ? parseFloat(row[2]) : 0);
-                    dashboardData.glTimeDistribution.duringClose.push(row[3] != null ? parseFloat(row[3]) : 0);
-                    if (row.length > 4 && row[4] != null) {
-                        dashboardData.glTimeDistribution.postClose.push(parseFloat(row[4]) || 0);
-                    } else {
-                        dashboardData.glTimeDistribution.postClose.push(0);
+                    if (!row || row.length <= colMonthlyVol) continue;
+                    if (row[colMonthlyVol] != null) {
+                        const label = String(row[colMonthlyVol]).trim();
+                        if (label === '') break;
+                        dashboardData.glMonthlyVolume.months.push(label);
+                        dashboardData.glMonthlyVolume.daily.push(row[colMonthlyVol + 1] != null ? parseFloat(row[colMonthlyVol + 1]) : 0);
+                        dashboardData.glMonthlyVolume.preClose.push(row[colMonthlyVol + 2] != null ? parseFloat(row[colMonthlyVol + 2]) : 0);
+                        dashboardData.glMonthlyVolume.duringClose.push(row[colMonthlyVol + 3] != null ? parseFloat(row[colMonthlyVol + 3]) : 0);
+                        dashboardData.glMonthlyVolume.postClose.push(row[colMonthlyVol + 4] != null ? parseFloat(row[colMonthlyVol + 4]) : 0);
+                        dashboardData.glMonthlyVolume.total.push(row[colMonthlyVol + 5] != null ? parseFloat(row[colMonthlyVol + 5]) : 0);
+                    }
+                }
+            }
+
+            // 区域3: 月度分时段处理账务分布 (Col 10-14)
+            dashboardData.glTimeDistribution.months = [];
+            dashboardData.glTimeDistribution.daily = [];
+            dashboardData.glTimeDistribution.preClose = [];
+            dashboardData.glTimeDistribution.duringClose = [];
+            dashboardData.glTimeDistribution.postClose = [];
+            if (colTimeDist >= 0) {
+                for (let r = 2; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row.length <= colTimeDist) continue;
+                    if (row[colTimeDist] != null) {
+                        const label = String(row[colTimeDist]).trim();
+                        if (label === '') break;
+                        dashboardData.glTimeDistribution.months.push(label);
+                        dashboardData.glTimeDistribution.daily.push(row[colTimeDist + 1] != null ? parseFloat(row[colTimeDist + 1]) : 0);
+                        dashboardData.glTimeDistribution.preClose.push(row[colTimeDist + 2] != null ? parseFloat(row[colTimeDist + 2]) : 0);
+                        dashboardData.glTimeDistribution.duringClose.push(row[colTimeDist + 3] != null ? parseFloat(row[colTimeDist + 3]) : 0);
+                        dashboardData.glTimeDistribution.postClose.push(row[colTimeDist + 4] != null ? parseFloat(row[colTimeDist + 4]) : 0);
                     }
                 }
             }
