@@ -685,6 +685,22 @@
             return -1;
         }
 
+        // 智能判断并跳过表头行
+        function skipHeaderIfNeeded(data, startRow, headerKeywords) {
+            headerKeywords = headerKeywords || ['月份', '年份', '时间', '院区', '区间', '人员', '类型', '说明', '不按期支付说明'];
+            const row = data[startRow];
+            if (!row) return startRow;
+            for (let c = 0; c < row.length; c++) {
+                if (row[c] != null) {
+                    const val = String(row[c]).trim();
+                    for (const kw of headerKeywords) {
+                        if (val === kw) return startRow + 1;
+                    }
+                }
+            }
+            return startRow;
+        }
+
         // 读取一个数据区域（从startRow开始，直到空行、合计行或数据结束）
         function readDataBlock(data, startRow, keyCol) {
             keyCol = keyCol || 0;
@@ -729,22 +745,21 @@
 
         // ========== AP Sheet（4个图表）==========
         function parseAPData(data) {
-            // 区域1: AP年单据量变化(K) - Row 1-5, Col A-B
-            // 标题行包含"AP年单据量"，表头为 年份 | 单据量(K)，数据行 2023年-2026年
-            const r1 = findRowIndex(data, ['AP年单据量', '年单据量变化'], 0);
+            // 区域1: AP年单据量变化(K) - 标题后直接是数据（无表头行）
+            const r1 = findRowIndex(data, ['AP年单据量'], 0);
             if (r1 >= 0) {
                 dashboardData.apYearly.years = [];
                 dashboardData.apYearly.values = [];
-                for (let r = r1 + 2; r < data.length; r++) { // +2 跳过标题行和表头行
+                const startRow = skipHeaderIfNeeded(data, r1 + 1, ['年份']);
+                for (let r = startRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '' || label === '年份') continue;
                     if (label === '总计' || label === '合计' || label === 'Total') break;
-                    // 遇到下一个区域标题时停止
-                    if (findRowIndex(data, ['AP月单据量', '月单据量变化'], r) === r) break;
+                    if (findRowIndex(data, ['AP月单据量'], r) === r) break;
                     const val = parseValue(row[1]);
-                    if (val === null) continue; // 跳过公式/非数字值
+                    if (val === null) continue;
                     dashboardData.apYearly.years.push(label.replace('年', ''));
                     dashboardData.apYearly.values.push(val);
                 }
