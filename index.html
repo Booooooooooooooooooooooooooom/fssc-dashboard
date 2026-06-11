@@ -448,6 +448,23 @@
                 return { latest, prev };
             }
             
+            // 辅助函数：从数组中获取最新两个有效值
+            function getLatestTwoFromArray(arr) {
+                if (!arr || arr.length === 0) return { latest: null, prev: null };
+                let latest = null, prev = null;
+                for (let i = arr.length - 1; i >= 0; i--) {
+                    if (arr[i] != null && arr[i] !== 0) {
+                        if (latest === null) {
+                            latest = arr[i];
+                        } else if (prev === null) {
+                            prev = arr[i];
+                            break;
+                        }
+                    }
+                }
+                return { latest, prev };
+            }
+            
             const yearKeys = ['data2026', 'data2025', 'data2024', 'data2023'];
             
             // AP - 使用apMonthly最新两个月的数据（跨年份）
@@ -467,7 +484,7 @@
             }
             
             // Treasury - 不按期支付
-            const td = dashboardData.treasuryDelay.values;
+            const td = dashboardData.treasuryDelayCategory.values;
             if (td.length >= 2) {
                 html += analysisItemHTML('不按期支付', td[td.length-1], ' 笔', calculateMoM(td[td.length-1], td[td.length-2]));
             }
@@ -492,36 +509,36 @@
                 html += analysisItemHTML('驳回率', brRate[brRate.length-1], '%', calculateMoM(brRate[brRate.length-1], brRate[brRate.length-2]));
             }
             
-            // Billing - 月度寄送量
-            const blTotal = dashboardData.billingEfficiency.total;
-            if (blTotal && blTotal.length >= 2) {
-                html += analysisItemHTML('Billing寄送量', blTotal[blTotal.length-1], ' K', calculateMoM(blTotal[blTotal.length-1], blTotal[blTotal.length-2]));
+            // Billing - 月度寄送量（使用billingYearly.total最新值）
+            const blTotal = getLatestTwoFromArray(dashboardData.billingYearly.total);
+            if (blTotal.latest !== null && blTotal.prev !== null) {
+                html += analysisItemHTML('Billing寄送量', blTotal.latest.toFixed(1), ' K', calculateMoM(blTotal.latest, blTotal.prev));
             }
             
             // Collection - 使用collectionC.calls和collectionC.rate最新两个月的数据
-            const ccCalls = dashboardData.collectionC.calls;
-            const ccRate = dashboardData.collectionC.rate;
-            if (ccCalls.length >= 2) {
-                html += analysisItemHTML('C端电话量', ccCalls[ccCalls.length-1], ' 通', calculateMoM(ccCalls[ccCalls.length-1], ccCalls[ccCalls.length-2]));
-                html += analysisItemHTML('C端接通率', ccRate[ccRate.length-1], '%', calculateMoM(ccRate[ccRate.length-1], ccRate[ccRate.length-2]));
+            const ccCalls = getLatestTwoFromArray(dashboardData.collectionC.calls);
+            const ccRate = getLatestTwoFromArray(dashboardData.collectionC.rate);
+            if (ccCalls.latest !== null && ccCalls.prev !== null) {
+                html += analysisItemHTML('C端电话量', ccCalls.latest.toFixed(0), ' 通', calculateMoM(ccCalls.latest, ccCalls.prev));
+                html += analysisItemHTML('C端接通率', ccRate.latest !== null ? ccRate.latest.toFixed(1) : '-', '%', calculateMoM(ccRate.latest, ccRate.prev));
             }
             
             // Collection - I端补件量
-            const ciTotal = dashboardData.collectionI.total;
-            if (ciTotal && ciTotal.length >= 2) {
-                html += analysisItemHTML('I端补件量', ciTotal[ciTotal.length-1], ' K', calculateMoM(ciTotal[ciTotal.length-1], ciTotal[ciTotal.length-2]));
+            const ciTotal = getLatestTwoFromArray(dashboardData.collectionI.total);
+            if (ciTotal.latest !== null && ciTotal.prev !== null) {
+                html += analysisItemHTML('I端补件量', ciTotal.latest.toFixed(1), ' K', calculateMoM(ciTotal.latest, ciTotal.prev));
             }
             
             // GL - 使用glError.count最新两个月的数据
-            const geCount = dashboardData.glError.count;
-            if (geCount.length >= 2) {
-                html += analysisItemHTML('错误入账', geCount[geCount.length-1], ' 件', calculateMoM(geCount[geCount.length-1], geCount[geCount.length-2]));
+            const geCount = getLatestTwoFromArray(dashboardData.glError.count);
+            if (geCount.latest !== null && geCount.prev !== null) {
+                html += analysisItemHTML('错误入账', geCount.latest.toFixed(0), ' 件', calculateMoM(geCount.latest, geCount.prev));
             }
             
             // GL - 月度账务量
-            const glTotal = dashboardData.glMonthlyVolume.total;
-            if (glTotal && glTotal.length >= 2) {
-                html += analysisItemHTML('GL月账务量', glTotal[glTotal.length-1], '', calculateMoM(glTotal[glTotal.length-1], glTotal[glTotal.length-2]));
+            const glTotalArr = getLatestTwoFromArray(dashboardData.glMonthlyVolume.total);
+            if (glTotalArr.latest !== null && glTotalArr.prev !== null) {
+                html += analysisItemHTML('GL月账务量', glTotalArr.latest.toFixed(0), '', calculateMoM(glTotalArr.latest, glTotalArr.prev));
             }
             
             document.getElementById('analysis-all').innerHTML = html;
@@ -758,48 +775,77 @@
                 dashboardData.apPrepaidByHospital.hospitals = [];
                 dashboardData.apPrepaidByHospital.amounts = [];
                 dashboardData.apPrepaidByHospital.counts = [];
-                for (let r = r4 + 1; r < data.length; r++) {
+                for (let r = r4 + 2; r < data.length; r++) { // +2 跳过表头行
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
-                    if (label === '') continue;
+                    if (label === '' || label === '院区') continue;
+                    if (findRowIndex(data, ['已预付未收货按区间分布'], r) === r) break;
+                    if (findRowIndex(data, ['已预付未收货清理进度'], r) === r) break;
                     dashboardData.apPrepaidByHospital.hospitals.push(label);
                     dashboardData.apPrepaidByHospital.counts.push(parseFloat(row[1]) || 0);
                     const amt = row[2] != null ? String(row[2]).trim() : '';
                     dashboardData.apPrepaidByHospital.amounts.push(amt.endsWith('M') ? parseFloat(amt.slice(0, -1)) : parseFloat(amt) || 0);
                 }
             }
+
+            // 区域5: 已预付未收货按区间分布
+            const r5 = findRowIndex(data, ['已预付未收货按区间分布'], r4 >= 0 ? r4 + 1 : 0);
+            if (r5 >= 0) {
+                dashboardData.apPrepaidByRange.ranges = [];
+                dashboardData.apPrepaidByRange.counts = [];
+                dashboardData.apPrepaidByRange.amounts = [];
+                for (let r = r5 + 2; r < data.length; r++) { // +2 跳过表头行
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '' || label === '区间') continue;
+                    if (findRowIndex(data, ['已预付未收货清理进度'], r) === r) break;
+                    dashboardData.apPrepaidByRange.ranges.push(label);
+                    dashboardData.apPrepaidByRange.counts.push(parseFloat(row[1]) || 0);
+                    const amt = row[2] != null ? String(row[2]).trim() : '';
+                    dashboardData.apPrepaidByRange.amounts.push(amt.endsWith('M') ? parseFloat(amt.slice(0, -1)) : parseFloat(amt) || 0);
+                }
+            }
+
+            // 区域6: 已预付未收货清理进度
+            const r6 = findRowIndex(data, ['已预付未收货清理进度'], r5 >= 0 ? r5 + 1 : 0);
+            if (r6 >= 0) {
+                dashboardData.apPrepaidByPerson.persons = [];
+                dashboardData.apPrepaidByPerson.amounts = [];
+                dashboardData.apPrepaidByPerson.clearedAmounts = [];
+                dashboardData.apPrepaidByPerson.clearRates = [];
+                for (let r = r6 + 2; r < data.length; r++) { // +2 跳过表头行
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '' || label === '人员') continue;
+                    dashboardData.apPrepaidByPerson.persons.push(label);
+                    const amt = row[1] != null ? String(row[1]).trim() : '';
+                    dashboardData.apPrepaidByPerson.amounts.push(amt.endsWith('M') ? parseFloat(amt.slice(0, -1)) : parseFloat(amt) || 0);
+                    const cleared = row[2] != null ? String(row[2]).trim() : '';
+                    dashboardData.apPrepaidByPerson.clearedAmounts.push(cleared.endsWith('M') ? parseFloat(cleared.slice(0, -1)) : parseFloat(cleared) || 0);
+                    dashboardData.apPrepaidByPerson.clearRates.push((parseFloat(row[3]) || 0) * 100);
+                }
+            }
         }
 
         // ========== Treasury Sheet ==========
         function parseTreasuryData(data) {
-            // 扫描 Row 0 确定各区域的列位置
-            let colPayment = -1, colDelay = -1;
-            if (data[0]) {
-                for (let c = 0; c < data[0].length; c++) {
-                    if (data[0][c] == null) continue;
-                    const val = String(data[0][c]).trim();
-                    if (val.includes('付款按年统计') && colPayment === -1) colPayment = c;
-                    if (val.includes('不按期支付') && colDelay === -1) colDelay = c;
-                }
-            }
-
             // 区域1: 付款按年统计 (Col 0-4)
             dashboardData.treasuryPayment.categories = [];
             dashboardData.treasuryPayment.online = [];
             dashboardData.treasuryPayment.offline = [];
-            if (colPayment >= 0) {
-                for (let r = 2; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row.length <= colPayment) continue;
-                    if (row[colPayment] != null) {
-                        const label = String(row[colPayment]).trim();
-                        if (label === '' || label === '合计') break;
-                        dashboardData.treasuryPayment.categories.push(label);
-                        dashboardData.treasuryPayment.online.push(row[colPayment + 1] != null ? parseFloat(row[colPayment + 1]) : 0);
-                        dashboardData.treasuryPayment.offline.push(row[colPayment + 2] != null ? parseFloat(row[colPayment + 2]) : 0);
-                    }
-                }
+            for (let r = 2; r < data.length; r++) {
+                const row = data[r];
+                if (!row || row[0] == null) continue;
+                const label = String(row[0]).trim();
+                if (label === '' || label === '合计') break;
+                if (label.includes('Treasury付款情况')) break;
+                if (label.includes('线下付款明细')) break;
+                dashboardData.treasuryPayment.categories.push(label);
+                dashboardData.treasuryPayment.online.push(row[1] != null ? parseFloat(row[1]) : 0);
+                dashboardData.treasuryPayment.offline.push(row[2] != null ? parseFloat(row[2]) : 0);
             }
 
             // 区域2: Treasury付款情况统计 (动态查找)
@@ -820,22 +866,51 @@
                 }
             }
 
-            // 区域3: 不按期支付 (Col 8-9)
+            // 区域3: 线下付款明细 (动态查找)
+            const r3 = findRowIndex(data, ['线下付款明细'], r2 >= 0 ? r2 + 1 : 0);
+            if (r3 >= 0) {
+                dashboardData.treasuryOfflineCategory.categories = [];
+                dashboardData.treasuryOfflineCategory.values = [];
+                for (let r = r3 + 2; r < data.length; r++) { // +2 跳过表头行
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '' || label === '类型') continue;
+                    if (findRowIndex(data, ['不按期支付分类'], r) === r) break;
+                    dashboardData.treasuryOfflineCategory.categories.push(label);
+                    dashboardData.treasuryOfflineCategory.values.push(parseFloat(row[1]) || 0);
+                }
+            }
+
+            // 区域4: 不按期支付 (Col 8-9)
             dashboardData.treasuryDelayCategory.categories = [];
             dashboardData.treasuryDelayCategory.values = [];
-            if (colDelay >= 0) {
-                for (let r = 2; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row.length <= colDelay) continue;
-                    if (row[colDelay] != null) {
-                        const label = String(row[colDelay]).trim();
-                        if (label === '' || label === '月份') continue;
-                        const val = row[colDelay + 1] != null ? parseFloat(row[colDelay + 1]) : null;
-                        if (val !== null) {
-                            dashboardData.treasuryDelayCategory.categories.push(label);
-                            dashboardData.treasuryDelayCategory.values.push(val);
-                        }
+            for (let r = 2; r < data.length; r++) {
+                const row = data[r];
+                if (!row || row.length <= 8) continue;
+                if (row[8] != null) {
+                    const label = String(row[8]).trim();
+                    if (label === '' || label === '月份' || label === '不按期支付') continue;
+                    const val = row[9] != null ? parseFloat(row[9]) : null;
+                    if (val !== null) {
+                        dashboardData.treasuryDelayCategory.categories.push(label);
+                        dashboardData.treasuryDelayCategory.values.push(val);
                     }
+                }
+            }
+
+            // 区域5: 不按期支付分类 (动态查找)
+            const r5 = findRowIndex(data, ['不按期支付分类'], r3 >= 0 ? r3 + 1 : 0);
+            if (r5 >= 0) {
+                dashboardData.treasuryDelay.categories = [];
+                dashboardData.treasuryDelay.values = [];
+                for (let r = r5 + 2; r < data.length; r++) { // +2 跳过表头行
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '' || label === '不按期支付说明') continue;
+                    dashboardData.treasuryDelay.categories.push(label);
+                    dashboardData.treasuryDelay.values.push(parseFloat(row[1]) || 0);
                 }
             }
         }
@@ -882,19 +957,20 @@
                 }
             }
 
-            // 区域3: Settlement月度处理账单 / 月度处理账单
-            const r3 = findRowIndex(data, ['Settlement月度处理账单', '月度处理账单'], r2 >= 0 ? r2 + 1 : 0);
+            // 区域3: Settlement月度处理账单量(K) - 与核销账单月度处理时效同结构
+            const r3 = findRowIndex(data, ['Settlement月度处理账单量'], r2 >= 0 ? r2 + 1 : 0);
             if (r3 >= 0) {
+                const headerRow = data[r3 + 1]; // 表头行: ['月份', 2023, 2024, 2025, 2026]
                 dashboardData.settlementMonthly.months = [];
                 dashboardData.settlementMonthly.data2023 = [];
                 dashboardData.settlementMonthly.data2024 = [];
                 dashboardData.settlementMonthly.data2025 = [];
                 dashboardData.settlementMonthly.data2026 = [];
-                for (let r = r3 + 1; r < data.length; r++) {
+                for (let r = r3 + 2; r < data.length; r++) { // +2 跳过表头
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
-                    if (label === '') continue;
+                    if (label === '' || label === 'Total') continue;
                     dashboardData.settlementMonthly.months.push(label);
                     dashboardData.settlementMonthly.data2023.push(row[1] != null && row[1] !== '' ? parseFloat(row[1]) : null);
                     dashboardData.settlementMonthly.data2024.push(row[2] != null && row[2] !== '' ? parseFloat(row[2]) : null);
