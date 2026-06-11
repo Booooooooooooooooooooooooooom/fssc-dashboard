@@ -385,7 +385,7 @@
                     updateAllCharts();
                     updateAnalysisSection();
                     loadAllRemarks();
-                } catch(e) { console.warn('恢复缓存数据失败:', e); }
+                } catch(e) { /* 恢复缓存数据失败 */ }
             }
             // 从API加载最新数据
             refreshFromAPI();
@@ -606,7 +606,7 @@
 
                     try {
                         localStorage.setItem('fssc_dashboard_data', JSON.stringify(dashboardData));
-                    } catch(e) { console.warn('缓存失败:', e); }
+                    } catch(e) { /* 缓存失败 */ }
 
                     const now = new Date();
                     const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
@@ -615,7 +615,6 @@
                     throw new Error(result.msg || 'API error');
                 }
             } catch(e) {
-                console.error('API load failed:', e);
                 document.getElementById('dataStatus').textContent = 'API 加载失败，使用缓存数据';
             } finally {
                 document.getElementById('loadingOverlay').classList.remove('active');
@@ -648,39 +647,81 @@
             return -1;
         }
 
-        // [原有的解析函数和图表更新函数...]
+        // 读取一个数据区域（从startRow开始，直到空行、合计行或数据结束）
+        function readDataBlock(data, startRow, keyCol) {
+            keyCol = keyCol || 0;
+            const result = [];
+            for (let r = startRow; r < data.length; r++) {
+                const row = data[r];
+                if (!row || row[keyCol] == null) continue; // 跳过空行
+                const label = String(row[keyCol]).trim();
+                if (label === '' || label === '合计' || label === '总计' || label === 'Total') continue; // 跳过合计行
+                result.push(row);
+            }
+            return result;
+        }
+
+        // 读取一个数据区域，遇到下一个区域的表头关键词时停止
+        function readDataBlockUntil(data, startRow, stopKeywords, keyCol) {
+            keyCol = keyCol || 0;
+            const result = [];
+            for (let r = startRow; r < data.length; r++) {
+                const row = data[r];
+                if (!row || row[keyCol] == null) continue;
+                const label = String(row[keyCol]).trim();
+                if (label === '' || label === '合计' || label === '总计' || label === 'Total') continue;
+                // 检查是否遇到下一个区域的表头
+                if (stopKeywords && stopKeywords.length > 0) {
+                    let shouldStop = false;
+                    for (let c = 0; c < row.length; c++) {
+                        if (row[c] != null) {
+                            const val = String(row[c]).trim();
+                            for (const kw of stopKeywords) {
+                                if (val.includes(kw)) { shouldStop = true; break; }
+                            }
+                        }
+                        if (shouldStop) break;
+                    }
+                    if (shouldStop) break;
+                }
+                result.push(row);
+            }
+            return result;
+        }
+
+        // ========== AP Sheet ==========
         function parseAPData(data) {
-            // 1. AP年单据量变化
-            const yearlyIdx = findRowIndex(data, ['AP年单据量', '年单据量变化']);
-            dashboardData.apYearly.years = [];
-            dashboardData.apYearly.values = [];
-            if (yearlyIdx >= 0) {
-                for (let r = yearlyIdx + 2; r < data.length; r++) {
+            // 区域1: AP年单据量变化
+            const r1 = findRowIndex(data, ['AP年单据量', '年单据量变化'], 0);
+            if (r1 >= 0) {
+                dashboardData.apYearly.years = [];
+                dashboardData.apYearly.values = [];
+                for (let r = r1 + 1; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) continue; // 跳过空行
+                    if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '') continue;
-                    if (label.includes('月单据量') || label.includes('Productivity') || label.includes('已预付')) break;
-                    if (label === '合计' || label === '总计' || label === 'Total') continue;
-                    dashboardData.apYearly.years.push(label.replace('年',''));
+                    if (findRowIndex(data, ['AP月单据量', '月单据量变化'], r) === r) break;
+                    dashboardData.apYearly.years.push(label.replace('年', ''));
                     dashboardData.apYearly.values.push(parseFloat(row[1]) || 0);
                 }
             }
 
-            // 2. AP月单据量变化
-            const monthlyIdx = findRowIndex(data, ['AP月单据量', '月单据量变化']);
-            if (monthlyIdx >= 0) {
+            // 区域2: AP月单据量变化
+            const r2 = findRowIndex(data, ['AP月单据量', '月单据量变化'], r1 >= 0 ? r1 + 1 : 0);
+            if (r2 >= 0) {
                 dashboardData.apMonthly.months = [];
                 dashboardData.apMonthly.data2023 = [];
                 dashboardData.apMonthly.data2024 = [];
                 dashboardData.apMonthly.data2025 = [];
                 dashboardData.apMonthly.data2026 = [];
-                for (let r = monthlyIdx + 2; r < data.length; r++) {
+                for (let r = r2 + 1; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) continue; // 跳过空行
+                    if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '') continue;
-                    if (label.includes('合计') || label.includes('Productivity') || label.includes('已预付')) break;
+                    if (findRowIndex(data, ['Productivity'], r) === r) break;
+                    if (findRowIndex(data, ['已预付未收货按院区分类'], r) === r) break;
                     dashboardData.apMonthly.months.push(label);
                     dashboardData.apMonthly.data2023.push(row[1] != null ? parseFloat(row[1]) : null);
                     dashboardData.apMonthly.data2024.push(row[2] != null ? parseFloat(row[2]) : null);
@@ -689,20 +730,20 @@
                 }
             }
 
-            // 3. Productivity
-            const prodIdx = findRowIndex(data, ['Productivity']);
-            if (prodIdx >= 0) {
+            // 区域3: Productivity
+            const r3 = findRowIndex(data, ['Productivity'], r2 >= 0 ? r2 + 1 : 0);
+            if (r3 >= 0) {
                 dashboardData.apProductivity.months = [];
                 dashboardData.apProductivity.data2023 = [];
                 dashboardData.apProductivity.data2024 = [];
                 dashboardData.apProductivity.data2025 = [];
                 dashboardData.apProductivity.data2026 = [];
-                for (let r = prodIdx + 2; r < data.length; r++) {
+                for (let r = r3 + 1; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) continue; // 跳过空行
+                    if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '') continue;
-                    if (label.includes('已预付')) break;
+                    if (findRowIndex(data, ['已预付未收货按院区分类'], r) === r) break;
                     dashboardData.apProductivity.months.push(label);
                     dashboardData.apProductivity.data2023.push(row[1] != null ? parseFloat(row[1]) : null);
                     dashboardData.apProductivity.data2024.push(row[2] != null ? parseFloat(row[2]) : null);
@@ -711,244 +752,150 @@
                 }
             }
 
-            // 4. 已预付未收货按院区分类
-            const hospitalIdx = findRowIndex(data, ['已预付未收货按院区分类']);
-            if (hospitalIdx >= 0) {
+            // 区域4: 已预付未收货按院区分类
+            const r4 = findRowIndex(data, ['已预付未收货按院区分类'], r3 >= 0 ? r3 + 1 : 0);
+            if (r4 >= 0) {
                 dashboardData.apPrepaidByHospital.hospitals = [];
                 dashboardData.apPrepaidByHospital.amounts = [];
                 dashboardData.apPrepaidByHospital.counts = [];
-                for (let r = hospitalIdx + 2; r < data.length; r++) {
+                for (let r = r4 + 1; r < data.length; r++) {
                     const row = data[r];
-                    if (!row || row[0] == null) continue; // 跳过空行
+                    if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '') continue;
-                    if (label.includes('已预付未收货按区间') || label.includes('已预付未收货清理')) break;
                     dashboardData.apPrepaidByHospital.hospitals.push(label);
                     dashboardData.apPrepaidByHospital.counts.push(parseFloat(row[1]) || 0);
                     const amt = row[2] != null ? String(row[2]).trim() : '';
                     dashboardData.apPrepaidByHospital.amounts.push(amt.endsWith('M') ? parseFloat(amt.slice(0, -1)) : parseFloat(amt) || 0);
                 }
             }
-
-            // 5. 已预付未收货按区间分布
-            const rangeIdx = findRowIndex(data, ['已预付未收货按区间分布']);
-            if (rangeIdx >= 0) {
-                dashboardData.apPrepaidByRange.ranges = [];
-                dashboardData.apPrepaidByRange.amounts = [];
-                dashboardData.apPrepaidByRange.counts = [];
-                for (let r = rangeIdx + 2; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[0] == null) continue; // 跳过空行
-                    const label = String(row[0]).trim();
-                    if (label === '') continue;
-                    if (label.includes('已预付未收货清理')) break;
-                    dashboardData.apPrepaidByRange.ranges.push(label);
-                    dashboardData.apPrepaidByRange.counts.push(parseFloat(row[1]) || 0);
-                    const amt = row[2] != null ? String(row[2]).trim() : '';
-                    dashboardData.apPrepaidByRange.amounts.push(amt.endsWith('M') ? parseFloat(amt.slice(0, -1)) : parseFloat(amt) || 0);
-                }
-            }
-
-            // 6. 已预付未收货清理进度
-            const personIdx = findRowIndex(data, ['已预付未收货清理进度']);
-            if (personIdx >= 0) {
-                dashboardData.apPrepaidByPerson.persons = [];
-                dashboardData.apPrepaidByPerson.amounts = [];
-                dashboardData.apPrepaidByPerson.clearedAmounts = [];
-                dashboardData.apPrepaidByPerson.clearRates = [];
-                for (let r = personIdx + 2; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[0] == null) continue; // 跳过空行
-                    const label = String(row[0]).trim();
-                    if (label === '') continue;
-                    dashboardData.apPrepaidByPerson.persons.push(label);
-                    const openAmt = row[1] != null ? String(row[1]).trim() : '';
-                    dashboardData.apPrepaidByPerson.amounts.push(openAmt.endsWith('M') ? parseFloat(openAmt.slice(0, -1)) : parseFloat(openAmt) || 0);
-                    const clearedAmt = row[2] != null ? String(row[2]).trim() : '';
-                    dashboardData.apPrepaidByPerson.clearedAmounts.push(clearedAmt.endsWith('M') ? parseFloat(clearedAmt.slice(0, -1)) : parseFloat(clearedAmt) || 0);
-                    const rate = row[3] != null ? parseFloat(row[3]) : 0;
-                    dashboardData.apPrepaidByPerson.clearRates.push(Math.round(rate * 100));
-                }
-            }
         }
-        
+
+        // ========== Treasury Sheet ==========
         function parseTreasuryData(data) {
-            // 付款情况统计 - R16标题，R17表头(col1=银企直连,col2=线下付款,col3=合计)，R18起数据(col0=年份标签)
-            dashboardData.treasuryPayment.categories = [];
-            dashboardData.treasuryPayment.online = [];
-            dashboardData.treasuryPayment.offline = [];
-            for (let r = 18; r < data.length; r++) {
-                const row = data[r];
-                if (!row || row[0] == null) continue;
-                const label = String(row[0]).trim();
-                if (label === '') continue;
-                if (label === '合计') break;
-                dashboardData.treasuryPayment.categories.push(label);
-                dashboardData.treasuryPayment.online.push(parseFloat(row[1]) || 0);
-                dashboardData.treasuryPayment.offline.push(parseFloat(row[2]) || 0);
-            }
-            // 不按期支付数量 - 从col8/col9读取（R1标题在col8, R2数据从col8开始）
-            dashboardData.treasuryDelay.months = [];
-            dashboardData.treasuryDelay.values = [];
-            for (let r = 2; r < data.length; r++) {
-                const row = data[r];
-                if (!row || row[8] == null) continue;
-                const label = String(row[8]).trim();
-                if (label === '') continue;
-                if (label.includes('按年统计') || label.includes('线下付款')) break;
-                dashboardData.treasuryDelay.months.push(label);
-                dashboardData.treasuryDelay.values.push(parseFloat(row[9]) || 0);
-            }
-            // 年度付款数据 - 年份从R2 col1开始
-            let annualPayIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('不按期支付付款按年统计')) {
-                    annualPayIdx = i;
-                    break;
-                }
-            }
-            if (annualPayIdx >= 0) {
-                // 年份在标题行的下一行(R2) col1-4
-                const yearRow = data[annualPayIdx + 1];
-                dashboardData.treasuryAnnualPayment.years = [];
-                if (yearRow) {
-                    for (let c = 1; c <= 4 && c < yearRow.length; c++) {
-                        if (yearRow[c] != null) dashboardData.treasuryAnnualPayment.years.push(String(yearRow[c]));
-                    }
-                }
-                dashboardData.treasuryAnnualPayment.online = [];
-                dashboardData.treasuryAnnualPayment.offline = [];
-                // 数据从R3开始，col0是标签，col1-4是值
-                for (let r = annualPayIdx + 2; r < data.length; r++) {
+            // 区域1: Treasury付款方式 / 付款方式统计 / 银企直连
+            const r1 = findRowIndex(data, ['Treasury付款方式', '付款方式统计', '银企直连'], 0);
+            if (r1 >= 0) {
+                dashboardData.treasuryPayment.categories = [];
+                dashboardData.treasuryPayment.online = [];
+                dashboardData.treasuryPayment.offline = [];
+                for (let r = r1 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
-                    if (label === '银企直连') {
-                        for (let c = 1; c <= 4 && c < row.length; c++) dashboardData.treasuryAnnualPayment.online.push(parseFloat(row[c]) || 0);
-                    } else if (label === '线下付款') {
-                        for (let c = 1; c <= 4 && c < row.length; c++) dashboardData.treasuryAnnualPayment.offline.push(parseFloat(row[c]) || 0);
-                    } else if (label === '合计') {
-                        break;
+                    if (label === '' || label === '合计') continue;
+                    if (findRowIndex(data, ['Treasury付款情况', '付款情况统计'], r) === r) break;
+                    if (findRowIndex(data, ['不按期支付分类'], r) === r) break;
+                    dashboardData.treasuryPayment.categories.push(label);
+                    dashboardData.treasuryPayment.online.push(parseFloat(row[1]) || 0);
+                    dashboardData.treasuryPayment.offline.push(parseFloat(row[2]) || 0);
+                }
+            }
+
+            // 区域2: Treasury付款情况 / 付款情况统计
+            const r2 = findRowIndex(data, ['Treasury付款情况', '付款情况统计'], r1 >= 0 ? r1 + 1 : 0);
+            if (r2 >= 0) {
+                dashboardData.treasuryAnnualPayment.years = [];
+                dashboardData.treasuryAnnualPayment.online = [];
+                dashboardData.treasuryAnnualPayment.offline = [];
+                for (let r = r2 + 1; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '' || label === '合计') continue;
+                    if (findRowIndex(data, ['不按期支付分类'], r) === r) break;
+                    dashboardData.treasuryAnnualPayment.years.push(label);
+                    dashboardData.treasuryAnnualPayment.online.push(parseFloat(row[1]) || 0);
+                    dashboardData.treasuryAnnualPayment.offline.push(parseFloat(row[2]) || 0);
+                }
+            }
+
+            // 区域3: 不按期支付分类 (列I-J)
+            const r3 = findRowIndex(data, ['不按期支付分类'], r2 >= 0 ? r2 + 1 : 0);
+            if (r3 >= 0) {
+                dashboardData.treasuryDelayCategory.categories = [];
+                dashboardData.treasuryDelayCategory.values = [];
+                for (let r = r3 + 1; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row) continue;
+                    // 查找包含数据的列（可能在I-J或A-B）
+                    let label = '', val = null, found = false;
+                    for (let c = 0; c < row.length; c++) {
+                        if (row[c] != null) {
+                            const s = String(row[c]).trim();
+                            if (s !== '' && s !== '不按期支付说明' && !found) {
+                                label = s;
+                                found = true;
+                            } else if (found && val === null) {
+                                val = parseFloat(row[c]) || 0;
+                                break;
+                            }
+                        }
+                    }
+                    if (label && val !== null) {
+                        dashboardData.treasuryDelayCategory.categories.push(label);
+                        dashboardData.treasuryDelayCategory.values.push(val);
                     }
                 }
             }
-            // 线下付款明细
-            let offlineIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][8] != null && String(data[i][8]).includes('线下付款明细')) {
-                    offlineIdx = i;
-                    break;
-                }
-            }
-            if (offlineIdx >= 0) {
-                dashboardData.treasuryOfflineCategory.categories = [];
-                dashboardData.treasuryOfflineCategory.values = [];
-                for (let r = offlineIdx + 1; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[8] == null) continue;
-                    const label = String(row[8]).trim();
-                    if (label === '') continue;
-                    if (label === '类型') continue;
-                    dashboardData.treasuryOfflineCategory.categories.push(String(row[8]).trim());
-                    dashboardData.treasuryOfflineCategory.values.push(parseFloat(row[9]) || 0);
-                }
-            }
-            // 不按期支付分类
-            let delayCatIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][8] != null && String(data[i][8]).includes('不按期支付分类')) {
-                    delayCatIdx = i;
-                    break;
-                }
-            }
-            if (delayCatIdx >= 0) {
-                dashboardData.treasuryDelayCategory.categories = [];
-                dashboardData.treasuryDelayCategory.values = [];
-                for (let r = delayCatIdx + 1; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[8] == null) continue;
-                    const label = String(row[8]).trim();
-                    if (label === '') continue;
-                    if (label === '不按期支付说明') continue;
-                    dashboardData.treasuryDelayCategory.categories.push(String(row[8]).trim());
-                    dashboardData.treasuryDelayCategory.values.push(parseFloat(row[9]) || 0);
-                }
-            }
         }
-        
+
+        // ========== Settlement Sheet ==========
         function parseSettlementData(data) {
-            const row1 = data[1];
-            if (row1) {
-                dashboardData.settlementYearly.years = ['2023', '2024', '2025', '2026'];
-                dashboardData.settlementYearly.values = [
-                    parseFloat(row1[1]) || 0,
-                    parseFloat(row1[2]) || 0,
-                    parseFloat(row1[3]) || 0,
-                    parseFloat(row1[4]) || 0
-                ];
-            }
-            dashboardData.settlementEfficiency.data2023 = [];
-            dashboardData.settlementEfficiency.data2024 = [];
-            dashboardData.settlementEfficiency.data2025 = [];
-            dashboardData.settlementEfficiency.data2026 = [];
-            for (let r = 2; r < data.length && r <= 6; r++) {
-                const row = data[r];
-                if (!row || row[8] == null) continue;
-                const yearLabel = String(row[8]).trim();
-                const values = [];
-                for (let c = 9; c <= 20 && c < row.length; c++) {
-                    values.push(row[c] != null ? parseFloat(row[c]) : null);
+            // 区域1: Settlement年度处理账单 / 年度处理账单
+            const r1 = findRowIndex(data, ['Settlement年度处理账单', '年度处理账单'], 0);
+            if (r1 >= 0) {
+                const headerRow = data[r1];
+                const years = [];
+                if (headerRow) {
+                    for (let c = 1; c < headerRow.length; c++) {
+                        if (headerRow[c] != null) years.push(String(headerRow[c]).trim());
+                    }
                 }
-                if (yearLabel === '2023') dashboardData.settlementEfficiency.data2023 = values;
-                else if (yearLabel === '2024') dashboardData.settlementEfficiency.data2024 = values;
-                else if (yearLabel === '2025') dashboardData.settlementEfficiency.data2025 = values;
-                else if (yearLabel === '2026') dashboardData.settlementEfficiency.data2026 = values;
-                else if (yearLabel === 'Target') dashboardData.settlementEfficiency.target = values[0] || 3;
-            }
-            let distIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('分时段处理核销账单')) {
-                    distIdx = i;
-                    break;
+                dashboardData.settlementYearly.years = years.length ? years : ['2023', '2024', '2025', '2026'];
+                const dataRow = data[r1 + 1];
+                if (dataRow) {
+                    dashboardData.settlementYearly.values = [];
+                    for (let c = 1; c <= dashboardData.settlementYearly.years.length && c < dataRow.length; c++) {
+                        dashboardData.settlementYearly.values.push(parseFloat(dataRow[c]) || 0);
+                    }
                 }
             }
-            if (distIdx >= 0) {
+
+            // 区域2: Settlement分时段 / 分时段处理核销账单
+            const r2 = findRowIndex(data, ['Settlement分时段', '分时段处理核销账单'], r1 >= 0 ? r1 + 1 : 0);
+            if (r2 >= 0) {
                 dashboardData.settlementDistribution.months = [];
                 dashboardData.settlementDistribution.early = [];
                 dashboardData.settlementDistribution.mid = [];
                 dashboardData.settlementDistribution.late = [];
-                for (let r = distIdx + 2; r < data.length; r++) {
+                for (let r = r2 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '') continue;
+                    if (findRowIndex(data, ['Settlement月度处理账单', '月度处理账单'], r) === r) break;
                     dashboardData.settlementDistribution.months.push(label);
                     dashboardData.settlementDistribution.early.push(parseFloat(row[1]) || 0);
                     dashboardData.settlementDistribution.mid.push(parseFloat(row[2]) || 0);
                     dashboardData.settlementDistribution.late.push(parseFloat(row[3]) || 0);
                 }
             }
-            // 月度处理账单量
-            let monthlyIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('Settlement月度处理账单量')) {
-                    monthlyIdx = i;
-                    break;
-                }
-            }
-            if (monthlyIdx >= 0) {
+
+            // 区域3: Settlement月度处理账单 / 月度处理账单
+            const r3 = findRowIndex(data, ['Settlement月度处理账单', '月度处理账单'], r2 >= 0 ? r2 + 1 : 0);
+            if (r3 >= 0) {
                 dashboardData.settlementMonthly.months = [];
                 dashboardData.settlementMonthly.data2023 = [];
                 dashboardData.settlementMonthly.data2024 = [];
                 dashboardData.settlementMonthly.data2025 = [];
                 dashboardData.settlementMonthly.data2026 = [];
-                for (let r = monthlyIdx + 2; r < data.length; r++) {
+                for (let r = r3 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '') continue;
-                    if (label === 'Total') break;
-                    dashboardData.settlementMonthly.months.push(String(row[0]).trim());
+                    dashboardData.settlementMonthly.months.push(label);
                     dashboardData.settlementMonthly.data2023.push(row[1] != null && row[1] !== '' ? parseFloat(row[1]) : null);
                     dashboardData.settlementMonthly.data2024.push(row[2] != null && row[2] !== '' ? parseFloat(row[2]) : null);
                     dashboardData.settlementMonthly.data2025.push(row[3] != null && row[3] !== '' ? parseFloat(row[3]) : null);
@@ -956,413 +903,356 @@
                 }
             }
         }
-        
+
+        // ========== under review Sheet ==========
         function parseUnderReviewData(data) {
-            // 旧版under review趋势数据（保持兼容）
-            const amountRow = data[6];
-            if (amountRow) {
+            // 区域1: under review账单金额 / 账单金额
+            const r1 = findRowIndex(data, ['under review账单金额', '账单金额'], 0);
+            if (r1 >= 0) {
+                const headerRow = data[r1];
                 dashboardData.settlementUnderReview.periods = [];
+                if (headerRow) {
+                    for (let c = 1; c < headerRow.length; c++) {
+                        if (headerRow[c] != null) dashboardData.settlementUnderReview.periods.push(String(headerRow[c]));
+                    }
+                }
                 dashboardData.settlementUnderReview.amount = [];
-                const headerRow = data[1];
-                for (let c = 1; c < headerRow.length; c++) {
-                    if (headerRow[c] != null) dashboardData.settlementUnderReview.periods.push(String(headerRow[c]));
-                }
-                for (let c = 1; c < amountRow.length; c++) {
-                    const val = amountRow[c];
-                    if (val != null) {
-                        const s = String(val).trim();
-                        dashboardData.settlementUnderReview.amount.push(s.endsWith('M') ? parseFloat(s.slice(0,-1)) : parseFloat(s) || 0);
+                for (let r = r1 + 1; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    if (findRowIndex(data, ['under review账单数量', '账单数量'], r) === r) break;
+                    for (let c = 1; c < row.length && c <= dashboardData.settlementUnderReview.periods.length; c++) {
+                        const val = row[c];
+                        if (val != null) {
+                            const s = String(val).trim();
+                            dashboardData.settlementUnderReview.amount.push(s.endsWith('M') ? parseFloat(s.slice(0, -1)) : parseFloat(s) || 0);
+                        } else {
+                            dashboardData.settlementUnderReview.amount.push(0);
+                        }
                     }
                 }
             }
-            const countRow = data[18];
-            if (countRow) {
+
+            // 区域2: under review账单数量 / 账单数量
+            const r2 = findRowIndex(data, ['under review账单数量', '账单数量'], r1 >= 0 ? r1 + 1 : 0);
+            if (r2 >= 0) {
                 dashboardData.settlementUnderReview.count = [];
-                for (let c = 1; c < countRow.length; c++) {
-                    dashboardData.settlementUnderReview.count.push(parseFloat(countRow[c]) || 0);
-                }
-            }
-
-            // 金额按年度 - 折线图格式（每个年度一条线，X轴是月份，含总计）
-            let amountYearlyIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('under review账单金额')) {
-                    amountYearlyIdx = i;
-                    break;
-                }
-            }
-            if (amountYearlyIdx >= 0) {
-                const amtHeaderRow = data[amountYearlyIdx + 1];
-                // 获取月份列表（跳过col0"账单年度"和col1"Baseline"）
-                const periods = [];
-                for (let c = 2; c < amtHeaderRow.length; c++) {
-                    if (amtHeaderRow[c] != null) periods.push(String(amtHeaderRow[c]));
-                }
-                dashboardData.settlementURAmountYearly.periods = periods;
-                dashboardData.settlementURAmountYearly.seriesNames = [];
-                dashboardData.settlementURAmountYearly.series = [];
-                // 读取每个年度的数据行
-                for (let r = amountYearlyIdx + 2; r < data.length; r++) {
+                for (let r = r2 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
-                    const yearLabel = String(row[0]).trim();
-                    if (yearLabel === '') continue;
-                    const seriesData = [];
-                    for (let c = 2; c < amtHeaderRow.length; c++) {
-                        const val = row[c] != null ? String(row[c]).trim() : '';
-                        seriesData.push(val.endsWith('M') ? parseFloat(val.slice(0, -1)) : parseFloat(val) || 0);
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    for (let c = 1; c < row.length && c <= dashboardData.settlementUnderReview.periods.length; c++) {
+                        dashboardData.settlementUnderReview.count.push(parseFloat(row[c]) || 0);
                     }
-                    dashboardData.settlementURAmountYearly.seriesNames.push(yearLabel);
-                    dashboardData.settlementURAmountYearly.series.push({ name: yearLabel, data: seriesData });
-                    if (yearLabel === '合计') break;
-                }
-            }
-
-            // 数量按年度 - 折线图格式
-            let countYearlyIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('under review账单数量')) {
-                    countYearlyIdx = i;
-                    break;
-                }
-            }
-            if (countYearlyIdx >= 0) {
-                const cntHeaderRow = data[countYearlyIdx + 1];
-                const periods = [];
-                for (let c = 2; c < cntHeaderRow.length; c++) {
-                    if (cntHeaderRow[c] != null) periods.push(String(cntHeaderRow[c]));
-                }
-                dashboardData.settlementURCountYearly.periods = periods;
-                dashboardData.settlementURCountYearly.seriesNames = [];
-                dashboardData.settlementURCountYearly.series = [];
-                for (let r = countYearlyIdx + 2; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row[0] == null) continue;
-                    const yearLabel = String(row[0]).trim();
-                    if (yearLabel === '') continue;
-                    const seriesData = [];
-                    for (let c = 2; c < cntHeaderRow.length; c++) {
-                        seriesData.push(parseFloat(row[c]) || 0);
-                    }
-                    dashboardData.settlementURCountYearly.seriesNames.push(yearLabel);
-                    dashboardData.settlementURCountYearly.series.push({ name: yearLabel, data: seriesData });
-                    if (yearLabel === '合计') break;
                 }
             }
         }
-        
+
+        // ========== Billing Sheet ==========
         function parseBillingData(data) {
-            dashboardData.billingYearly.years = ['2023', '2024', '2025', '2026'];
-            dashboardData.billingYearly.edi = [];
-            dashboardData.billingYearly.express = [];
-            dashboardData.billingYearly.email = [];
-            dashboardData.billingYearly.sftp = [];
-            dashboardData.billingYearly.total = [];
-            for (let r = 2; r < data.length && r <= 6; r++) {
-                const row = data[r];
-                if (!row || row[0] == null) continue;
-                const type = String(row[0]).trim();
-                if (type === 'EDI') {
-                    for (let c = 1; c <= 4; c++) dashboardData.billingYearly.edi.push(parseFloat(row[c]) || 0);
-                } else if (type.includes('快递')) {
-                    for (let c = 1; c <= 4; c++) dashboardData.billingYearly.express.push(parseFloat(row[c]) || 0);
-                } else if (type.includes('E-mail') || type.includes('Email')) {
-                    for (let c = 1; c <= 4; c++) dashboardData.billingYearly.email.push(parseFloat(row[c]) || 0);
-                } else if (type === 'SFTP') {
-                    for (let c = 1; c <= 4; c++) dashboardData.billingYearly.sftp.push(parseFloat(row[c]) || 0);
-                } else if (type.includes('合计')) {
-                    for (let c = 1; c <= 4; c++) dashboardData.billingYearly.total.push(parseFloat(row[c]) || 0);
-                }
-            }
-            dashboardData.billingRatio.years = [];
-            dashboardData.billingRatio.express = [];
-            dashboardData.billingRatio.email = [];
-            let ratioIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('寄送方式占比')) {
-                    ratioIdx = i;
-                    break;
-                }
-            }
-            if (ratioIdx >= 0) {
-                const headerRow = data[ratioIdx];
-                for (let c = 1; c < headerRow.length; c++) {
-                    if (headerRow[c] != null) dashboardData.billingRatio.years.push(String(headerRow[c]));
-                }
-                for (let r = ratioIdx + 1; r < data.length && r <= ratioIdx + 2; r++) {
+            // 区域1: Billing账单接收 / 账单接收方式
+            const r1 = findRowIndex(data, ['Billing账单接收', '账单接收方式'], 0);
+            if (r1 >= 0) {
+                dashboardData.billingYearly.years = ['2023', '2024', '2025', '2026'];
+                dashboardData.billingYearly.edi = [];
+                dashboardData.billingYearly.express = [];
+                dashboardData.billingYearly.email = [];
+                dashboardData.billingYearly.sftp = [];
+                dashboardData.billingYearly.total = [];
+                for (let r = r1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
-                    const values = [];
-                    for (let c = 1; c < row.length; c++) values.push((parseFloat(row[c]) || 0) * 100);
-                    if (type.includes('快递')) dashboardData.billingRatio.express = values;
-                    else if (type.includes('E-mail') || type.includes('Email')) dashboardData.billingRatio.email = values;
-                }
-            }
-            let effIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('账单处理时效')) {
-                    effIdx = i;
-                    break;
-                }
-            }
-            if (effIdx >= 0) {
-                // 月份从R20（effIdx行）的col1开始读取
-                const monthRow = data[effIdx];
-                dashboardData.billingEfficiency.months = [];
-                if (monthRow) {
-                    for (let c = 1; c < monthRow.length; c++) {
-                        if (monthRow[c] != null) dashboardData.billingEfficiency.months.push(String(monthRow[c]));
+                    if (type === '') continue;
+                    if (findRowIndex(data, ['Billing寄送方式占比', '寄送方式占比'], r) === r) break;
+                    if (findRowIndex(data, ['Billing处理时效', '账单处理时效'], r) === r) break;
+                    if (findRowIndex(data, ['Billing驳回分析', '驳回分析'], r) === r) break;
+                    if (type === 'EDI') {
+                        for (let c = 1; c <= 4 && c < row.length; c++) dashboardData.billingYearly.edi.push(parseFloat(row[c]) || 0);
+                    } else if (type.includes('快递')) {
+                        for (let c = 1; c <= 4 && c < row.length; c++) dashboardData.billingYearly.express.push(parseFloat(row[c]) || 0);
+                    } else if (type.includes('E-mail') || type.includes('Email')) {
+                        for (let c = 1; c <= 4 && c < row.length; c++) dashboardData.billingYearly.email.push(parseFloat(row[c]) || 0);
+                    } else if (type === 'SFTP') {
+                        for (let c = 1; c <= 4 && c < row.length; c++) dashboardData.billingYearly.sftp.push(parseFloat(row[c]) || 0);
+                    } else if (type.includes('合计')) {
+                        for (let c = 1; c <= 4 && c < row.length; c++) dashboardData.billingYearly.total.push(parseFloat(row[c]) || 0);
                     }
                 }
+            }
+
+            // 区域2: Billing寄送方式占比 / 寄送方式占比
+            const r2 = findRowIndex(data, ['Billing寄送方式占比', '寄送方式占比'], r1 >= 0 ? r1 + 1 : 0);
+            if (r2 >= 0) {
+                dashboardData.billingRatio.years = [];
+                dashboardData.billingRatio.express = [];
+                dashboardData.billingRatio.email = [];
+                let firstRow = true;
+                for (let r = r2; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const type = String(row[0]).trim();
+                    if (type === '') continue;
+                    if (findRowIndex(data, ['Billing处理时效', '账单处理时效'], r) === r) break;
+                    if (findRowIndex(data, ['Billing驳回分析', '驳回分析'], r) === r) break;
+                    if (firstRow) {
+                        for (let c = 1; c < row.length; c++) {
+                            if (row[c] != null) dashboardData.billingRatio.years.push(String(row[c]));
+                        }
+                        firstRow = false;
+                    } else {
+                        const values = [];
+                        for (let c = 1; c < row.length; c++) values.push((parseFloat(row[c]) || 0) * 100);
+                        if (type.includes('快递')) dashboardData.billingRatio.express = values;
+                        else if (type.includes('E-mail') || type.includes('Email')) dashboardData.billingRatio.email = values;
+                    }
+                }
+            }
+
+            // 区域3: Billing处理时效 / 账单处理时效
+            const r3 = findRowIndex(data, ['Billing处理时效', '账单处理时效'], r2 >= 0 ? r2 + 1 : 0);
+            if (r3 >= 0) {
+                dashboardData.billingEfficiency.months = [];
                 dashboardData.billingEfficiency.ssc = [];
                 dashboardData.billingEfficiency.pa = [];
                 dashboardData.billingEfficiency.coding = [];
                 dashboardData.billingEfficiency.target = [];
                 dashboardData.billingEfficiency.total = [];
-                // 数据从R21（effIdx+1行）开始，col0是标签，col1开始是数据
-                for (let r = effIdx + 1; r < data.length && r <= effIdx + 5; r++) {
+                let firstRow = true;
+                for (let r = r3; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
-                    const values = [];
-                    for (let c = 1; c < row.length; c++) values.push(row[c] != null ? parseFloat(row[c]) : null);
-                    if (type === 'SSC处理') dashboardData.billingEfficiency.ssc = values;
-                    else if (type === 'PA处理') dashboardData.billingEfficiency.pa = values;
-                    else if (type.includes('Coding')) dashboardData.billingEfficiency.coding = values;
-                    else if (type === 'Target') dashboardData.billingEfficiency.target = values;
-                    else if (type.includes('合计')) dashboardData.billingEfficiency.total = values;
+                    if (type === '') continue;
+                    if (findRowIndex(data, ['Billing驳回分析', '驳回分析'], r) === r) break;
+                    if (firstRow) {
+                        for (let c = 1; c < row.length; c++) {
+                            if (row[c] != null) dashboardData.billingEfficiency.months.push(String(row[c]));
+                        }
+                        firstRow = false;
+                    } else {
+                        const values = [];
+                        for (let c = 1; c < row.length; c++) values.push(row[c] != null ? parseFloat(row[c]) : null);
+                        if (type === 'SSC处理') dashboardData.billingEfficiency.ssc = values;
+                        else if (type === 'PA处理') dashboardData.billingEfficiency.pa = values;
+                        else if (type.includes('Coding')) dashboardData.billingEfficiency.coding = values;
+                        else if (type === 'Target') dashboardData.billingEfficiency.target = values;
+                        else if (type.includes('合计')) dashboardData.billingEfficiency.total = values;
+                    }
                 }
             }
-            let rejectIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][0] != null && String(data[i][0]).includes('驳回分析')) {
-                    rejectIdx = i;
-                    break;
-                }
-            }
-            if (rejectIdx >= 0) {
-                const headerRow = data[rejectIdx];
+
+            // 区域4: Billing驳回分析 / 驳回分析
+            const r4 = findRowIndex(data, ['Billing驳回分析', '驳回分析'], r3 >= 0 ? r3 + 1 : 0);
+            if (r4 >= 0) {
                 dashboardData.billingReject.months = [];
                 dashboardData.billingReject.rate = [];
                 dashboardData.billingReject.target = [];
-                for (let c = 1; c < headerRow.length; c++) {
-                    if (headerRow[c] != null) dashboardData.billingReject.months.push(String(headerRow[c]));
-                }
-                for (let r = rejectIdx + 1; r < data.length && r <= rejectIdx + 2; r++) {
+                let firstRow = true;
+                for (let r = r4; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
-                    if (type.includes('Target')) {
-                        const values = [];
-                        for (let c = 1; c < row.length; c++) values.push((parseFloat(row[c]) || 0) * 100);
-                        dashboardData.billingReject.target = values;
-                    } else if (type.includes('驳回率')) {
-                        for (let c = 1; c < row.length; c++) dashboardData.billingReject.rate.push((parseFloat(row[c]) || 0) * 100);
+                    if (type === '') continue;
+                    if (firstRow) {
+                        for (let c = 1; c < row.length; c++) {
+                            if (row[c] != null) dashboardData.billingReject.months.push(String(row[c]));
+                        }
+                        firstRow = false;
+                    } else {
+                        if (type.includes('Target')) {
+                            const values = [];
+                            for (let c = 1; c < row.length; c++) values.push((parseFloat(row[c]) || 0) * 100);
+                            dashboardData.billingReject.target = values;
+                        } else if (type.includes('驳回率')) {
+                            for (let c = 1; c < row.length; c++) dashboardData.billingReject.rate.push((parseFloat(row[c]) || 0) * 100);
+                        }
                     }
                 }
             }
         }
-        
+
+        // ========== Collection-I端 Sheet ==========
         function parseCollectionIData(data) {
-            dashboardData.collectionI.months = [];
-            dashboardData.collectionI.total = [];
-            dashboardData.collectionI.case = [];
-            dashboardData.collectionI.other = [];
-            dashboardData.collectionI.ratio = [];
-            const headerRow = data[1];
-            for (let c = 1; c < headerRow.length; c++) {
-                if (headerRow[c] != null) dashboardData.collectionI.months.push(String(headerRow[c]));
-            }
-            for (let r = 2; r < data.length && r <= 5; r++) {
-                const row = data[r];
-                if (!row || row[0] == null) continue;
-                const type = String(row[0]).trim();
-                if (type === '补件数量') {
-                    for (let c = 1; c < row.length; c++) dashboardData.collectionI.total.push(parseFloat(row[c]) || 0);
-                } else if (type === '病例补件') {
-                    for (let c = 1; c < row.length; c++) dashboardData.collectionI.case.push(parseFloat(row[c]) || 0);
-                } else if (type === '其他补件') {
-                    for (let c = 1; c < row.length; c++) dashboardData.collectionI.other.push(parseFloat(row[c]) || 0);
-                } else if (type === '病例占比') {
-                    for (let c = 1; c < row.length; c++) dashboardData.collectionI.ratio.push((parseFloat(row[c]) || 0) * 100);
+            const r1 = findRowIndex(data, ['Collection-I端补件', '补件情况'], 0);
+            if (r1 >= 0) {
+                const headerRow = data[r1];
+                dashboardData.collectionI.months = [];
+                dashboardData.collectionI.total = [];
+                dashboardData.collectionI.case = [];
+                dashboardData.collectionI.other = [];
+                dashboardData.collectionI.ratio = [];
+                if (headerRow) {
+                    for (let c = 1; c < headerRow.length; c++) {
+                        if (headerRow[c] != null) dashboardData.collectionI.months.push(String(headerRow[c]));
+                    }
+                }
+                for (let r = r1 + 1; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const type = String(row[0]).trim();
+                    if (type === '') continue;
+                    if (type === '补件数量') {
+                        for (let c = 1; c < row.length; c++) dashboardData.collectionI.total.push(parseFloat(row[c]) || 0);
+                    } else if (type === '病例补件') {
+                        for (let c = 1; c < row.length; c++) dashboardData.collectionI.case.push(parseFloat(row[c]) || 0);
+                    } else if (type === '其他补件') {
+                        for (let c = 1; c < row.length; c++) dashboardData.collectionI.other.push(parseFloat(row[c]) || 0);
+                    } else if (type === '病例占比') {
+                        for (let c = 1; c < row.length; c++) dashboardData.collectionI.ratio.push((parseFloat(row[c]) || 0) * 100);
+                    }
                 }
             }
         }
-        
+
+        // ========== Collection-C端 Sheet ==========
         function parseCollectionCData(data) {
-            dashboardData.collectionC.months = [];
-            dashboardData.collectionC.calls = [];
-            dashboardData.collectionC.rate = [];
-            for (let r = 2; r < data.length; r++) {
-                const row = data[r];
-                if (!row || row[0] == null) continue;
-                const label = String(row[0]).trim();
-                if (label === '') continue;
-                if (label.includes('呼入') || label.includes('呼出') || label.includes('AI')) break;
-                dashboardData.collectionC.months.push(label);
-                dashboardData.collectionC.calls.push(parseFloat(row[1]) || 0);
-                dashboardData.collectionC.rate.push((parseFloat(row[2]) || 0) * 100);
-            }
-            dashboardData.collectionCIn.months = [];
-            dashboardData.collectionCIn.connected = [];
-            dashboardData.collectionCIn.missed = [];
-            dashboardData.collectionCIn.rate = [];
-            for (let r = 2; r < data.length; r++) {
-                const row = data[r];
-                if (!row || row[5] == null) continue;
-                const label = String(row[5]).trim();
-                if (label === '') continue;
-                if (label.includes('呼出') || label.includes('AI')) break;
-                dashboardData.collectionCIn.months.push(label);
-                dashboardData.collectionCIn.connected.push(parseFloat(row[6]) || 0);
-                dashboardData.collectionCIn.missed.push(parseFloat(row[7]) || 0);
-                dashboardData.collectionCIn.rate.push((parseFloat(row[9]) || 0) * 100);
-            }
-            dashboardData.collectionCOut.months = [];
-            dashboardData.collectionCOut.connected = [];
-            dashboardData.collectionCOut.missed = [];
-            dashboardData.collectionCOut.rate = [];
-            let outStartIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][5] != null && String(data[i][5]).includes('呼出')) {
-                    outStartIdx = i + 2;
-                    break;
+            // 区域1: C端呼入电话 / 呼入电话接起
+            const r1 = findRowIndex(data, ['C端呼入电话', '呼入电话接起'], 0);
+            if (r1 >= 0) {
+                dashboardData.collectionC.months = [];
+                dashboardData.collectionC.calls = [];
+                dashboardData.collectionC.rate = [];
+                for (let r = r1; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    if (findRowIndex(data, ['C端呼出电话', '呼出电话接起'], r) === r) break;
+                    if (findRowIndex(data, ['智能语音电话', '语音电话沟通'], r) === r) break;
+                    dashboardData.collectionC.months.push(label);
+                    dashboardData.collectionC.calls.push(parseFloat(row[1]) || 0);
+                    dashboardData.collectionC.rate.push((parseFloat(row[2]) || 0) * 100);
                 }
             }
-            if (outStartIdx < 0) outStartIdx = 20;
-            for (let r = outStartIdx; r < data.length; r++) {
-                const row = data[r];
-                if (!row || row[5] == null) continue;
-                const label = String(row[5]).trim();
-                if (label === '') continue;
-                if (label.includes('AI') || label.includes('合计')) break;
-                dashboardData.collectionCOut.months.push(label);
-                dashboardData.collectionCOut.connected.push(parseFloat(row[6]) || 0);
-                dashboardData.collectionCOut.missed.push(parseFloat(row[7]) || 0);
-                dashboardData.collectionCOut.rate.push((parseFloat(row[9]) || 0) * 100);
-            }
-            dashboardData.collectionCAI.months = [];
-            dashboardData.collectionCAI.connected = [];
-            dashboardData.collectionCAI.missed = [];
-            dashboardData.collectionCAI.rate = [];
-            let aiStartIdx = -1;
-            for (let i = 0; i < data.length; i++) {
-                if (data[i] && data[i][5] != null && String(data[i][5]).includes('AI')) {
-                    aiStartIdx = i + 2;
-                    break;
+
+            // 区域2: C端呼出电话 / 呼出电话接起 (列F-J)
+            const r2 = findRowIndex(data, ['C端呼出电话', '呼出电话接起'], r1 >= 0 ? r1 + 1 : 0);
+            if (r2 >= 0) {
+                dashboardData.collectionCIn.months = [];
+                dashboardData.collectionCIn.connected = [];
+                dashboardData.collectionCIn.missed = [];
+                dashboardData.collectionCIn.rate = [];
+                for (let r = r2; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[5] == null) continue;
+                    const label = String(row[5]).trim();
+                    if (label === '') continue;
+                    if (findRowIndex(data, ['智能语音电话', '语音电话沟通'], r) === r) break;
+                    dashboardData.collectionCIn.months.push(label);
+                    dashboardData.collectionCIn.connected.push(parseFloat(row[6]) || 0);
+                    dashboardData.collectionCIn.missed.push(parseFloat(row[7]) || 0);
+                    dashboardData.collectionCIn.rate.push((parseFloat(row[9]) || 0) * 100);
                 }
             }
-            if (aiStartIdx < 0) aiStartIdx = 38;
-            for (let r = aiStartIdx; r < data.length; r++) {
-                const row = data[r];
-                if (!row || row[5] == null) continue;
-                const label = String(row[5]).trim();
-                if (label === '') continue;
-                dashboardData.collectionCAI.months.push(label);
-                dashboardData.collectionCAI.connected.push(parseFloat(row[6]) || 0);
-                dashboardData.collectionCAI.missed.push(parseFloat(row[7]) || 0);
-                dashboardData.collectionCAI.rate.push((parseFloat(row[9]) || 0) * 100);
+
+            // 区域3: 智能语音电话 / 语音电话沟通 (列F-J)
+            const r3 = findRowIndex(data, ['智能语音电话', '语音电话沟通'], r2 >= 0 ? r2 + 1 : 0);
+            if (r3 >= 0) {
+                dashboardData.collectionCAI.months = [];
+                dashboardData.collectionCAI.connected = [];
+                dashboardData.collectionCAI.missed = [];
+                dashboardData.collectionCAI.rate = [];
+                for (let r = r3; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[5] == null) continue;
+                    const label = String(row[5]).trim();
+                    if (label === '') continue;
+                    dashboardData.collectionCAI.months.push(label);
+                    dashboardData.collectionCAI.connected.push(parseFloat(row[6]) || 0);
+                    dashboardData.collectionCAI.missed.push(parseFloat(row[7]) || 0);
+                    dashboardData.collectionCAI.rate.push((parseFloat(row[9]) || 0) * 100);
+                }
             }
         }
-        
+
+        // ========== GL Sheet ==========
         function parseGLData(data) {
-            // GL sheet 数据布局（横向排列在同一行）：
-            // Col 0-1:   GL错误入账事项（月份/错账数量）
-            // Col 3-4:   GL结账时间（时间/关账时效）
-            // Col 6-11:  GL月度账务量（年月/Daily/月结前准备/月结期间/月结后调整/合计）
-            // Col 13-17: 月度分时段处理账务分布（年月/Daily/月结前准备/月结期间/月结后调整）
-            // Row 0: 合并表头行
-            // Row 1: 子表头行
-            // Row 2+: 数据行
-
-            // 先扫描 Row 0 确定各表格的列起始位置
-            let colError = -1, colTime = -1, colMonthlyVol = -1, colTimeDist = -1;
-            if (data[0]) {
-                for (let c = 0; c < data[0].length; c++) {
-                    if (data[0][c] == null) continue;
-                    const val = String(data[0][c]).trim();
-                    if (val.includes('GL错误入账') && colError === -1) colError = c;
-                    if (val.includes('GL结账时间') && colTime === -1) colTime = c;
-                    if (val.includes('GL月度账务量') && colMonthlyVol === -1) colMonthlyVol = c;
-                    if (val.includes('月度分时段处理账务分布') && colTimeDist === -1) colTimeDist = c;
+            // 区域1: GL月结调整 / 月结调整次数
+            const r1 = findRowIndex(data, ['GL月结调整', '月结调整次数'], 0);
+            if (r1 >= 0) {
+                dashboardData.glError.months = [];
+                dashboardData.glError.count = [];
+                for (let r = r1; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    if (findRowIndex(data, ['GL月结工时', '月结工时'], r) === r) break;
+                    if (findRowIndex(data, ['月结工时占比', '工时占比'], r) === r) break;
+                    dashboardData.glError.months.push(label);
+                    dashboardData.glError.count.push(parseFloat(row[1]) || 0);
                 }
             }
 
-            // 1. GL错误入账事项
-            dashboardData.glError.months = [];
-            dashboardData.glError.count = [];
-            if (colError >= 0) {
-                for (let r = 2; r < data.length; r++) {
+            // 区域2: GL月结工时 / 月结工时 (列D-I)
+            const r2 = findRowIndex(data, ['GL月结工时', '月结工时'], r1 >= 0 ? r1 + 1 : 0);
+            if (r2 >= 0) {
+                dashboardData.glTime.months = [];
+                dashboardData.glTime.days = [];
+                for (let r = r2; r < data.length; r++) {
                     const row = data[r];
-                    if (!row) continue;
-                    if (row[colError] != null) {
-                        const label = String(row[colError]).trim();
-                        if (label === '') continue;
-                        dashboardData.glError.months.push(label);
-                        dashboardData.glError.count.push(parseFloat(row[colError + 1]) || 0);
+                    if (!row || row[3] == null) continue;
+                    const label = String(row[3]).trim();
+                    if (label === '') continue;
+                    if (findRowIndex(data, ['月结工时占比', '工时占比'], r) === r) break;
+                    dashboardData.glTime.months.push(label);
+                    dashboardData.glTime.days.push(parseFloat(row[4]) || 0);
+                }
+            }
+
+            // 区域3: GL月度账务量 (列A-E)
+            const r3 = findRowIndex(data, ['GL月度账务量'], r2 >= 0 ? r2 + 1 : 0);
+            if (r3 >= 0) {
+                dashboardData.glMonthlyVolume.months = [];
+                dashboardData.glMonthlyVolume.daily = [];
+                dashboardData.glMonthlyVolume.preClose = [];
+                dashboardData.glMonthlyVolume.duringClose = [];
+                dashboardData.glMonthlyVolume.postClose = [];
+                dashboardData.glMonthlyVolume.total = [];
+                for (let r = r3; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    if (findRowIndex(data, ['月度分时段处理账务分布'], r) === r) break;
+                    dashboardData.glMonthlyVolume.months.push(label);
+                    dashboardData.glMonthlyVolume.daily.push(row[1] != null ? parseFloat(row[1]) : 0);
+                    dashboardData.glMonthlyVolume.preClose.push(row[2] != null ? parseFloat(row[2]) : 0);
+                    dashboardData.glMonthlyVolume.duringClose.push(row[3] != null ? parseFloat(row[3]) : 0);
+                    if (row.length > 4 && row[4] != null) {
+                        dashboardData.glMonthlyVolume.postClose.push(parseFloat(row[4]) || 0);
+                    } else {
+                        dashboardData.glMonthlyVolume.postClose.push(0);
                     }
+                    dashboardData.glMonthlyVolume.total.push(0);
                 }
             }
 
-            // 2. GL结账时间
-            dashboardData.glTime.months = [];
-            dashboardData.glTime.days = [];
-            if (colTime >= 0) {
-                for (let r = 2; r < data.length; r++) {
+            // 区域4: 月度分时段处理账务分布
+            const r4 = findRowIndex(data, ['月度分时段处理账务分布'], r3 >= 0 ? r3 + 1 : 0);
+            if (r4 >= 0) {
+                dashboardData.glTimeDistribution.months = [];
+                dashboardData.glTimeDistribution.daily = [];
+                dashboardData.glTimeDistribution.preClose = [];
+                dashboardData.glTimeDistribution.duringClose = [];
+                dashboardData.glTimeDistribution.postClose = [];
+                for (let r = r4; r < data.length; r++) {
                     const row = data[r];
-                    if (!row) continue;
-                    if (row[colTime] != null) {
-                        const label = String(row[colTime]).trim();
-                        if (label === '') continue;
-                        dashboardData.glTime.months.push(label);
-                        dashboardData.glTime.days.push(parseFloat(row[colTime + 1]) || 0);
-                    }
-                }
-            }
-
-            // 3. GL月度账务量
-            dashboardData.glMonthlyVolume.months = [];
-            dashboardData.glMonthlyVolume.daily = [];
-            dashboardData.glMonthlyVolume.preClose = [];
-            dashboardData.glMonthlyVolume.duringClose = [];
-            dashboardData.glMonthlyVolume.postClose = [];
-            dashboardData.glMonthlyVolume.total = [];
-            if (colMonthlyVol >= 0) {
-                for (let r = 2; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row.length <= colMonthlyVol) continue;
-                    if (row[colMonthlyVol] != null && row[colMonthlyVol] !== undefined) {
-                        const label = String(row[colMonthlyVol]).trim();
-                        if (label === '' || label === 'null') continue;
-                        dashboardData.glMonthlyVolume.months.push(label);
-                        dashboardData.glMonthlyVolume.daily.push(row[colMonthlyVol + 1] != null ? parseFloat(row[colMonthlyVol + 1]) : 0);
-                        dashboardData.glMonthlyVolume.preClose.push(row[colMonthlyVol + 2] != null ? parseFloat(row[colMonthlyVol + 2]) : 0);
-                        dashboardData.glMonthlyVolume.duringClose.push(row[colMonthlyVol + 3] != null ? parseFloat(row[colMonthlyVol + 3]) : 0);
-                        dashboardData.glMonthlyVolume.postClose.push(row[colMonthlyVol + 4] != null ? parseFloat(row[colMonthlyVol + 4]) : 0);
-                        dashboardData.glMonthlyVolume.total.push(row[colMonthlyVol + 5] != null ? parseFloat(row[colMonthlyVol + 5]) : 0);
-                    }
-                }
-            }
-
-            // 4. 月度分时段处理账务分布
-            dashboardData.glTimeDistribution.months = [];
-            dashboardData.glTimeDistribution.daily = [];
-            dashboardData.glTimeDistribution.preClose = [];
-            dashboardData.glTimeDistribution.duringClose = [];
-            dashboardData.glTimeDistribution.postClose = [];
-            if (colTimeDist >= 0) {
-                for (let r = 2; r < data.length; r++) {
-                    const row = data[r];
-                    if (!row || row.length <= colTimeDist) continue;
-                    if (row[colTimeDist] != null && row[colTimeDist] !== undefined) {
-                        const label = String(row[colTimeDist]).trim();
-                        if (label === '' || label === 'null') continue;
-                        dashboardData.glTimeDistribution.months.push(label);
-                        dashboardData.glTimeDistribution.daily.push(row[colTimeDist + 1] != null ? parseFloat(row[colTimeDist + 1]) : 0);
-                        dashboardData.glTimeDistribution.preClose.push(row[colTimeDist + 2] != null ? parseFloat(row[colTimeDist + 2]) : 0);
-                        dashboardData.glTimeDistribution.duringClose.push(row[colTimeDist + 3] != null ? parseFloat(row[colTimeDist + 3]) : 0);
-                        dashboardData.glTimeDistribution.postClose.push(row[colTimeDist + 4] != null ? parseFloat(row[colTimeDist + 4]) : 0);
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '') continue;
+                    dashboardData.glTimeDistribution.months.push(label);
+                    dashboardData.glTimeDistribution.daily.push(row[1] != null ? parseFloat(row[1]) : 0);
+                    dashboardData.glTimeDistribution.preClose.push(row[2] != null ? parseFloat(row[2]) : 0);
+                    dashboardData.glTimeDistribution.duringClose.push(row[3] != null ? parseFloat(row[3]) : 0);
+                    if (row.length > 4 && row[4] != null) {
+                        dashboardData.glTimeDistribution.postClose.push(parseFloat(row[4]) || 0);
+                    } else {
+                        dashboardData.glTimeDistribution.postClose.push(0);
                     }
                 }
             }
