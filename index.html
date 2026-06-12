@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FSSC 财务报告展示平台 - 增强版</title>
+    <title>FSSC 运营数据平台 - 增强版</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -85,7 +85,7 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <h1>FSSC 财务报告展示平台</h1>
+            <h1>FSSC 运营数据平台</h1>
             <div class="upload-section">
                 <span class="file-info" id="dataStatus">正在连接数据源...</span>
                 <button class="upload-btn" style="background:#17a2b8;color:white;" onclick="refreshFromAPI()">刷新数据</button>
@@ -765,8 +765,7 @@
                 }
             }
 
-            // 区域2: AP月单据量变化(K) - Row 12-25, Col A-E
-            // 表头: 月份 | 2023年 | 2024年 | 2025年 | 2026年
+            // 区域2: AP月单据量变化(K)
             const r2 = findRowIndex(data, ['AP月单据量', '月单据量变化'], r1 >= 0 ? r1 + 1 : 0);
             if (r2 >= 0) {
                 dashboardData.apMonthly.months = [];
@@ -774,13 +773,13 @@
                 dashboardData.apMonthly.data2024 = [];
                 dashboardData.apMonthly.data2025 = [];
                 dashboardData.apMonthly.data2026 = [];
-                for (let r = r2 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow = skipHeaderIfNeeded(data, r2 + 1, ['月份']);
+                for (let r = startRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '' || label === '月份') continue;
                     if (label === '总计' || label === '合计' || label === 'Total') continue;
-                    // 遇到下一个区域标题时停止
                     if (findRowIndex(data, ['Productivity'], r) === r) break;
                     dashboardData.apMonthly.months.push(label);
                     dashboardData.apMonthly.data2023.push(parseValue(row[1]));
@@ -790,8 +789,7 @@
                 }
             }
 
-            // 区域3: Productivity - Row 29-42, Col A-E
-            // 表头: 月份 | 2023年 | 2024年 | 2025年 | 2026年
+            // 区域3: Productivity
             const r3 = findRowIndex(data, ['Productivity'], r2 >= 0 ? r2 + 1 : 0);
             if (r3 >= 0) {
                 dashboardData.apProductivity.months = [];
@@ -799,13 +797,13 @@
                 dashboardData.apProductivity.data2024 = [];
                 dashboardData.apProductivity.data2025 = [];
                 dashboardData.apProductivity.data2026 = [];
-                for (let r = r3 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow = skipHeaderIfNeeded(data, r3 + 1, ['月份']);
+                for (let r = startRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '' || label === '月份') continue;
                     if (label === '总计' || label === '合计' || label === 'Total') continue;
-                    // 遇到下一个区域标题时停止
                     if (findRowIndex(data, ['已预付未收货按院区分类', '已预付未收货'], r) === r) break;
                     dashboardData.apProductivity.months.push(label);
                     dashboardData.apProductivity.data2023.push(parseValue(row[1]));
@@ -815,20 +813,19 @@
                 }
             }
 
-            // 区域4: 已预付未收货按院区分类 - Row 45+, Col A-C
-            // 表头: 院区 | 数量 | 金额(M)
+            // 区域4: 已预付未收货按院区分类
             const r4 = findRowIndex(data, ['已预付未收货按院区分类', '已预付未收货'], r3 >= 0 ? r3 + 1 : 0);
             if (r4 >= 0) {
                 dashboardData.apPrepaidByHospital.hospitals = [];
                 dashboardData.apPrepaidByHospital.amounts = [];
                 dashboardData.apPrepaidByHospital.counts = [];
-                for (let r = r4 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow = skipHeaderIfNeeded(data, r4 + 1, ['院区']);
+                for (let r = startRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '' || label === '院区') continue;
                     if (label === '总计' || label === '合计' || label === 'Total') continue;
-                    // 遇到下一个区域标题时停止（按区间分布、清理进度等）
                     if (findRowIndex(data, ['已预付未收货按区间分布'], r) === r) break;
                     if (findRowIndex(data, ['已预付未收货清理进度'], r) === r) break;
                     dashboardData.apPrepaidByHospital.hospitals.push(label);
@@ -843,7 +840,8 @@
                 dashboardData.apPrepaidByRange.ranges = [];
                 dashboardData.apPrepaidByRange.counts = [];
                 dashboardData.apPrepaidByRange.amounts = [];
-                for (let r = r5 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow = skipHeaderIfNeeded(data, r5 + 1, ['区间']);
+                for (let r = startRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -863,7 +861,8 @@
                 dashboardData.apPrepaidByPerson.amounts = [];
                 dashboardData.apPrepaidByPerson.clearedAmounts = [];
                 dashboardData.apPrepaidByPerson.clearRates = [];
-                for (let r = r6 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow = skipHeaderIfNeeded(data, r6 + 1, ['人员']);
+                for (let r = startRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1127,11 +1126,30 @@
         // ========== Under Review Sheet ==========
         function parseUnderReviewData(data) {
             // 区域1: Under Review金额明细（按年度）
-            // 表头: 时间 | 2023 | 2024 | 2025 | 2026 | Total
-            // 数据: 各年度金额行 + Total行
+            // 标题行: ['Under Review金额明细（单位：百万元）', 2023, 2024, 2025, 2026, Total]
+            // 或: ['Under Review金额', '年份', 2023, 2024, ...]
             const r1 = findRowIndex(data, ['Under Review金额', 'under review金额', '金额明细'], 0);
             if (r1 >= 0) {
-                const headerRow = data[r1 + 1];
+                // 判断标题行是否包含列标题（年份）
+                const titleRow = data[r1];
+                let hasYearsInTitle = false;
+                if (titleRow) {
+                    for (let c = 1; c < titleRow.length; c++) {
+                        if (titleRow[c] != null && /^20\d{2}$/.test(String(titleRow[c]).trim())) {
+                            hasYearsInTitle = true; break;
+                        }
+                    }
+                }
+                let headerRow, dataStartRow;
+                if (hasYearsInTitle) {
+                    // 标题行包含年份，直接从标题行读取
+                    headerRow = titleRow;
+                    dataStartRow = r1 + 1;
+                } else {
+                    // 标题行不含年份，下一行是表头
+                    headerRow = data[r1 + 1];
+                    dataStartRow = r1 + 2;
+                }
                 dashboardData.settlementURAmountYearly.periods = [];
                 if (headerRow) {
                     for (let c = 1; c < headerRow.length; c++) {
@@ -1140,7 +1158,7 @@
                 }
                 dashboardData.settlementURAmountYearly.seriesNames = [];
                 dashboardData.settlementURAmountYearly.series = [];
-                for (let r = r1 + 2; r < data.length; r++) {
+                for (let r = dataStartRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1159,7 +1177,23 @@
             // 区域2: Under Review数量明细（按年度）
             const r2 = findRowIndex(data, ['Under Review数量', 'under review数量', '数量明细'], r1 >= 0 ? r1 + 1 : 0);
             if (r2 >= 0) {
-                const headerRow = data[r2 + 1];
+                const titleRow = data[r2];
+                let hasYearsInTitle = false;
+                if (titleRow) {
+                    for (let c = 1; c < titleRow.length; c++) {
+                        if (titleRow[c] != null && /^20\d{2}$/.test(String(titleRow[c]).trim())) {
+                            hasYearsInTitle = true; break;
+                        }
+                    }
+                }
+                let headerRow, dataStartRow;
+                if (hasYearsInTitle) {
+                    headerRow = titleRow;
+                    dataStartRow = r2 + 1;
+                } else {
+                    headerRow = data[r2 + 1];
+                    dataStartRow = r2 + 2;
+                }
                 dashboardData.settlementURCountYearly.periods = [];
                 if (headerRow) {
                     for (let c = 1; c < headerRow.length; c++) {
@@ -1168,7 +1202,7 @@
                 }
                 dashboardData.settlementURCountYearly.seriesNames = [];
                 dashboardData.settlementURCountYearly.series = [];
-                for (let r = r2 + 2; r < data.length; r++) {
+                for (let r = dataStartRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1205,21 +1239,17 @@
 
         // ========== Billing Sheet（4个图表）==========
         function parseBillingData(data) {
-            // ========== 区域1: Billing年度账单寄送情况(K) - Row 0-5, Col 0-4 ==========
-            // 标题行: ['Billing年度账单寄送情况(K)', 2023, 2024, 2025, 2026, ...]
-            // 数据行: [' EDI ', 166, 232, 184, 84, ...]
-            //         [' 快递 ', 13, 7, 11, 1, ...]
-            //         [' E-mail ', 130, 112, 53, 21, ...]
-            //         [' SFTP ', 49, 47, 46, 23, ...]
-            //         [' 合计 ', 358, 398, 293, 128, ...]  <-- 跳过合计行
+            // ========== 区域1: Billing年度账单寄送情况(K) ==========
+            // 标题行: ['Billing年度账单寄送情况(K)', 2023, 2024, 2025, 2026]
+            // 数据行: EDI/快递/E-mail/SFTP/合计
             const r1 = findRowIndex(data, ['Billing年度账单寄送情况'], 0);
             if (r1 >= 0) {
-                let startRow = skipHeaderIfNeeded(data, r1 + 1, ['类型', '方式', '寄送方式']);
-                const headerRow = data[startRow];
+                // 从标题行读取年份
+                const titleRow = data[r1];
                 const years = [];
-                if (headerRow) {
-                    for (let c = 1; c < headerRow.length; c++) {
-                        if (headerRow[c] != null) years.push(String(headerRow[c]).trim());
+                if (titleRow) {
+                    for (let c = 1; c < titleRow.length; c++) {
+                        if (titleRow[c] != null) years.push(String(titleRow[c]).trim());
                     }
                 }
                 dashboardData.billingYearly.years = years.length ? years : ['2023', '2024', '2025', '2026'];
@@ -1228,14 +1258,12 @@
                 dashboardData.billingYearly.email = [];
                 dashboardData.billingYearly.sftp = [];
                 dashboardData.billingYearly.total = [];
-                for (let r = startRow + 1; r < data.length; r++) {
+                for (let r = r1 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
-                    if (type === '' || type === '类型' || type === '方式') continue;
-                    // 跳过合计行
+                    if (type === '') continue;
                     if (type === '合计' || type === '总计' || type === 'Total') continue;
-                    // 遇到下一个区域标题时停止
                     if (findRowIndex(data, ['Billing邮件/快递寄送方式占比'], r) === r) break;
                     if (findRowIndex(data, ['Billing账单处理时效'], r) === r) break;
                     if (findRowIndex(data, ['Billing驳回分析'], r) === r) break;
@@ -1251,30 +1279,27 @@
                 }
             }
 
-            // ========== 区域2: Billing邮件/快递寄送方式占比 - Row 9-11, Col 0-17 ==========
-            // 标题行: ['Billing邮件/快递寄送方式占比', '23年平均', '24年平均', '25年平均', 2505, 2506, ..., 2605, ...]
-            // 数据行: ['快递', 0.037, 0.016, 0.03, 0.053, ..., None]
-            //         ['E-mail', 0.362, 0.282, 0.17, 0.169, ..., None]
+            // ========== 区域2: Billing邮件/快递寄送方式占比 ==========
+            // 标题行: ['Billing邮件/快递寄送方式占比', '23年平均', '24年平均', '25年平均', 2505, ...]
+            // 数据行: 快递/E-mail
             const r2 = findRowIndex(data, ['Billing邮件/快递寄送方式占比'], r1 >= 0 ? r1 + 1 : 0);
             if (r2 >= 0) {
-                let startRow = skipHeaderIfNeeded(data, r2 + 1, ['时间', '月份', '类型']);
-                const headerRow = data[startRow];
+                // 从标题行读取时间标签
+                const titleRow = data[r2];
                 dashboardData.billingRatio.years = [];
-                if (headerRow) {
-                    for (let c = 1; c < headerRow.length; c++) {
-                        if (headerRow[c] != null) dashboardData.billingRatio.years.push(String(headerRow[c]).trim());
+                if (titleRow) {
+                    for (let c = 1; c < titleRow.length; c++) {
+                        if (titleRow[c] != null) dashboardData.billingRatio.years.push(String(titleRow[c]).trim());
                     }
                 }
                 dashboardData.billingRatio.express = [];
                 dashboardData.billingRatio.email = [];
-                for (let r = startRow + 1; r < data.length; r++) {
+                for (let r = r2 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
-                    if (type === '' || type === '类型' || type === '方式') continue;
-                    // 跳过合计行
+                    if (type === '') continue;
                     if (type === '合计' || type === '总计' || type === 'Total') continue;
-                    // 遇到下一个区域标题时停止
                     if (findRowIndex(data, ['Billing账单处理时效'], r) === r) break;
                     if (findRowIndex(data, ['Billing驳回分析'], r) === r) break;
                     if (findRowIndex(data, ['Billing月度账单寄送情况'], r) === r) break;
@@ -1288,21 +1313,16 @@
                 }
             }
 
-            // ========== 区域3: Billing账单处理时效 - Row 15-20, Col 0-14 ==========
-            // 标题行: ['Billing账单处理时效', 2505, 2506, ..., 2605, ...]
-            // 数据行: ['SSC处理', 1.9, 2, ..., 2.1, ...]
-            //         ['PA处理', 2.1, 2.1, ..., 3.4, ...]
-            //         ['Coding审核', 1.4, 1.4, ..., 0.7, ...]
-            //         ['Target', 6, 6, ..., 5, ...]
-            //         ['合计', 5.4, 5.5, ..., 6.2, ...]  <-- 跳过合计行
+            // ========== 区域3: Billing账单处理时效 ==========
+            // 标题行: ['Billing账单处理时效', 2505, 2506, ..., 2605]
+            // 数据行: SSC处理/PA处理/Coding审核/Target/合计
             const r3 = findRowIndex(data, ['Billing账单处理时效'], r2 >= 0 ? r2 + 1 : 0);
             if (r3 >= 0) {
-                let startRow = skipHeaderIfNeeded(data, r3 + 1, ['月份', '时间', '类型']);
-                const headerRow = data[startRow];
+                const titleRow = data[r3];
                 dashboardData.billingEfficiency.months = [];
-                if (headerRow) {
-                    for (let c = 1; c < headerRow.length; c++) {
-                        if (headerRow[c] != null) dashboardData.billingEfficiency.months.push(String(headerRow[c]).trim());
+                if (titleRow) {
+                    for (let c = 1; c < titleRow.length; c++) {
+                        if (titleRow[c] != null) dashboardData.billingEfficiency.months.push(String(titleRow[c]).trim());
                     }
                 }
                 dashboardData.billingEfficiency.ssc = [];
@@ -1310,14 +1330,12 @@
                 dashboardData.billingEfficiency.coding = [];
                 dashboardData.billingEfficiency.target = [];
                 dashboardData.billingEfficiency.total = [];
-                for (let r = startRow + 1; r < data.length; r++) {
+                for (let r = r3 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
-                    if (type === '' || type === '类型') continue;
-                    // 跳过合计行
+                    if (type === '') continue;
                     if (type === '合计' || type === '总计' || type === 'Total') continue;
-                    // 遇到下一个区域标题时停止
                     if (findRowIndex(data, ['Billing驳回分析'], r) === r) break;
                     if (findRowIndex(data, ['Billing月度账单寄送情况'], r) === r) break;
                     const values = [];
@@ -1331,54 +1349,49 @@
                 }
             }
 
-            // ========== 区域4: Billing驳回分析 - Row 24-26, Col 0-14 ==========
-            // 标题行: ['Billing驳回分析', 2505, 2506, ..., 2605, ...]
-            // 数据行: ['驳回率', 0.0127, 0.0123, ..., 0.0082, ...]
-            //         ['Target', 0.005, 0.005, ..., 0.003, ...]
+            // ========== 区域4: Billing驳回分析 ==========
+            // 标题行: ['Billing驳回分析', 2505, 2506, ..., 2605]
+            // 数据行: 驳回率/Target
             const r4 = findRowIndex(data, ['Billing驳回分析'], r3 >= 0 ? r3 + 1 : 0);
             if (r4 >= 0) {
-                let startRow = skipHeaderIfNeeded(data, r4 + 1, ['月份', '时间', '类型']);
-                const headerRow = data[startRow];
+                const titleRow = data[r4];
                 dashboardData.billingReject.months = [];
-                if (headerRow) {
-                    for (let c = 1; c < headerRow.length; c++) {
-                        if (headerRow[c] != null) dashboardData.billingReject.months.push(String(headerRow[c]).trim());
+                if (titleRow) {
+                    for (let c = 1; c < titleRow.length; c++) {
+                        if (titleRow[c] != null) dashboardData.billingReject.months.push(String(titleRow[c]).trim());
                     }
                 }
                 dashboardData.billingReject.rate = [];
                 dashboardData.billingReject.target = [];
-                for (let r = startRow + 1; r < data.length; r++) {
+                for (let r = r4 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
-                    if (type === '' || type === '类型') continue;
-                    // 跳过合计行
+                    if (type === '') continue;
                     if (type === '合计' || type === '总计' || type === 'Total') continue;
-                    // 遇到下一个区域标题时停止
                     if (findRowIndex(data, ['Billing月度账单寄送情况'], r) === r) break;
                     const values = [];
                     for (let c = 1; c < row.length && c <= dashboardData.billingReject.months.length; c++) {
                         const val = parseValue(row[c]);
                         values.push(val !== null ? val * 100 : 0);
                     }
-                    if (type.includes('Target') || type.includes('目标')) dashboardData.billingReject.target = values;
-                    else if (type.includes('驳回率')) dashboardData.billingReject.rate = values;
+                    if (type === '驳回率') dashboardData.billingReject.rate = values;
+                    else if (type === 'Target' || type.includes('目标')) dashboardData.billingReject.target = values;
                 }
             }
 
-            // ========== 区域5: Billing月度账单寄送情况 - Row 30-71, Col 0-1 ==========
-            // 标题行: ['Billing月度账单寄送情况', None, ...]
-            // 数据行: [2301, 17860], [2302, 22282], ..., [2605, 27466]
+            // ========== 区域5: Billing月度账单寄送情况 ==========
+            // 标题行: ['Billing月度账单寄送情况', None]
+            // 数据行: 2301-2605 | 数量
             const r5 = findRowIndex(data, ['Billing月度账单寄送情况'], r4 >= 0 ? r4 + 1 : 0);
             if (r5 >= 0) {
-                let startRow = skipHeaderIfNeeded(data, r5 + 1, ['月份', '时间']);
-                dashboardData.billingMonthly = { months: [], values: [] };
-                for (let r = startRow; r < data.length; r++) {
+                dashboardData.billingMonthly.months = [];
+                dashboardData.billingMonthly.values = [];
+                for (let r = r5 + 1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
-                    if (label === '' || label === '月份' || label === '时间') continue;
-                    // 跳过合计行
+                    if (label === '') continue;
                     if (label === '合计' || label === '总计' || label === 'Total') continue;
                     dashboardData.billingMonthly.months.push(label);
                     dashboardData.billingMonthly.values.push(parseValue(row[1]) || 0);
@@ -1464,7 +1477,8 @@
                 dashboardData.collectionC.months = [];
                 dashboardData.collectionC.calls = [];
                 dashboardData.collectionC.rate = [];
-                for (let r = r0 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow0 = skipHeaderIfNeeded(data, r0 + 1, ['月份']);
+                for (let r = startRow0; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1489,7 +1503,8 @@
                 dashboardData.collectionCIn.connected = [];
                 dashboardData.collectionCIn.missed = [];
                 dashboardData.collectionCIn.rate = [];
-                for (let r = r1 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow1 = skipHeaderIfNeeded(data, r1 + 1, ['月份']);
+                for (let r = startRow1; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1514,7 +1529,8 @@
                 dashboardData.collectionCOut.connected = [];
                 dashboardData.collectionCOut.missed = [];
                 dashboardData.collectionCOut.rate = [];
-                for (let r = r2 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow2 = skipHeaderIfNeeded(data, r2 + 1, ['月份']);
+                for (let r = startRow2; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1538,7 +1554,8 @@
                 dashboardData.collectionCAI.connected = [];
                 dashboardData.collectionCAI.missed = [];
                 dashboardData.collectionCAI.rate = [];
-                for (let r = r3 + 2; r < data.length; r++) { // +2 跳过标题和表头
+                const startRow3 = skipHeaderIfNeeded(data, r3 + 1, ['月份']);
+                for (let r = startRow3; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
@@ -1727,26 +1744,36 @@
             updateKPICard('kpi-gl-monthly', glLatest !== null ? glLatest.toFixed(0) : '-', '', glChange);
             
             // 账单流转数据 - 最新月度 + 环比
-            // Billing月度寄送量（取最新月份的合计）
-            const blTotal = dashboardData.billingEfficiency.total;
+            // Billing月度寄送量（从billingMonthly取最新月份数据）
+            const blValues = dashboardData.billingMonthly.values;
             let blLatest = null, blPrev = null, blChange = null;
-            if (blTotal && blTotal.length >= 1) {
-                blLatest = blTotal[blTotal.length - 1];
+            if (blValues && blValues.length >= 1) {
+                blLatest = blValues[blValues.length - 1];
             }
-            if (blTotal && blTotal.length >= 2) {
-                blPrev = blTotal[blTotal.length - 2];
+            if (blValues && blValues.length >= 2) {
+                blPrev = blValues[blValues.length - 2];
                 blChange = calculateMoM(blLatest, blPrev);
             }
             updateKPICard('kpi-billing-monthly', blLatest !== null ? blLatest.toFixed(1) : '-', 'K', blChange);
             
-            // Collection-I端补件量（最新月度）
+            // Collection-I端补件量（最新月度 - 取total数组最后一个非空值）
             const clITotal = dashboardData.collectionI.total;
-            let clILatest = null, clIPrev = null, clIChange = null;
-            if (clITotal && clITotal.length >= 1) {
-                clILatest = clITotal[clITotal.length - 1];
+            const clIMonths = dashboardData.collectionI.months;
+            let clILatest = null, clIPrev = null, clIChange = null, clILatestMonth = '';
+            if (clITotal && clITotal.length > 0) {
+                for (let i = clITotal.length - 1; i >= 0; i--) {
+                    if (clITotal[i] != null && clITotal[i] !== 0) {
+                        if (clILatest === null) {
+                            clILatest = clITotal[i];
+                            clILatestMonth = clIMonths && clIMonths[i] ? clIMonths[i] : '';
+                        } else if (clIPrev === null) {
+                            clIPrev = clITotal[i];
+                            break;
+                        }
+                    }
+                }
             }
-            if (clITotal && clITotal.length >= 2) {
-                clIPrev = clITotal[clITotal.length - 2];
+            if (clILatest !== null && clIPrev !== null) {
                 clIChange = calculateMoM(clILatest, clIPrev);
             }
             updateKPICard('kpi-collection-i-monthly', clILatest !== null ? clILatest.toFixed(1) : '-', 'K', clIChange);
