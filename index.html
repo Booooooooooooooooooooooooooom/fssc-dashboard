@@ -632,7 +632,9 @@
                     throw new Error(result.msg || 'API error');
                 }
             } catch(e) {
-                document.getElementById('dataStatus').textContent = 'API 加载失败，使用缓存数据';
+                console.error('API加载错误详情:', e);
+                console.error('错误堆栈:', e.stack);
+                document.getElementById('dataStatus').textContent = 'API 加载失败: ' + e.message;
             } finally {
                 document.getElementById('loadingOverlay').classList.remove('active');
             }
