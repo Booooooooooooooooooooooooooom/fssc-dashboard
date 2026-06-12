@@ -607,14 +607,14 @@
                 if (result.code === 0 && result.data) {
                     const sheets = result.data;
                     dashboardData = JSON.parse(JSON.stringify(defaultData));
-                    if (sheets['AP']) parseAPData(sheets['AP']);
-                    if (sheets['Treasury']) parseTreasuryData(sheets['Treasury']);
-                    if (sheets['Settlement']) parseSettlementData(sheets['Settlement']);
-                    if (sheets['under review']) parseUnderReviewData(sheets['under review']);
-                    if (sheets['Billing']) parseBillingData(sheets['Billing']);
-                    if (sheets['Collection-I端']) parseCollectionIData(sheets['Collection-I端']);
-                    if (sheets['Collection-C端']) parseCollectionCData(sheets['Collection-C端']);
-                    if (sheets['GL']) parseGLData(sheets['GL']);
+                    try { if (sheets['AP']) parseAPData(sheets['AP']); } catch(e) { console.error('AP解析错误:', e); }
+                    try { if (sheets['Treasury']) parseTreasuryData(sheets['Treasury']); } catch(e) { console.error('Treasury解析错误:', e); }
+                    try { if (sheets['Settlement']) parseSettlementData(sheets['Settlement']); } catch(e) { console.error('Settlement解析错误:', e); }
+                    try { if (sheets['under review']) parseUnderReviewData(sheets['under review']); } catch(e) { console.error('UnderReview解析错误:', e); }
+                    try { if (sheets['Billing']) parseBillingData(sheets['Billing']); } catch(e) { console.error('Billing解析错误:', e); }
+                    try { if (sheets['Collection-I端']) parseCollectionIData(sheets['Collection-I端']); } catch(e) { console.error('Collection-I解析错误:', e); }
+                    try { if (sheets['Collection-C端']) parseCollectionCData(sheets['Collection-C端']); } catch(e) { console.error('Collection-C解析错误:', e); }
+                    try { if (sheets['GL']) parseGLData(sheets['GL']); } catch(e) { console.error('GL解析错误:', e); }
 
                     updateKPIs();
                     updateAllCharts();
