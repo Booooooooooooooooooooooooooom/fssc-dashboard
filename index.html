@@ -1401,12 +1401,32 @@
 
         // ========== Collection-I端 Sheet（2个图表）==========
         function parseCollectionIData(data) {
-            // 区域1: Collection-I端补件情况 - Row 0-5, Col A-M
-            // 表头: 时间 | 24年平均 | 25年平均 | 2506-2605 | ...
+            // 区域1: Collection-I端补件情况
+            // 标题行可能包含列标题，也可能下一行是表头
             // 数据: 补件数量/病例补件/其他补件/病例占比
             const r1 = findRowIndex(data, ['Collection-I端补件情况', 'I端补件情况'], 0);
             if (r1 >= 0) {
-                const headerRow = data[r1 + 1];
+                // 判断标题行是否包含时间列标题
+                const titleRow = data[r1];
+                let hasTimeInTitle = false;
+                if (titleRow) {
+                    for (let c = 1; c < titleRow.length; c++) {
+                        if (titleRow[c] != null) {
+                            const val = String(titleRow[c]).trim();
+                            if (/^(24|25|26)年/.test(val) || /^\d{4}$/.test(val)) {
+                                hasTimeInTitle = true; break;
+                            }
+                        }
+                    }
+                }
+                let headerRow, dataStartRow;
+                if (hasTimeInTitle) {
+                    headerRow = titleRow;
+                    dataStartRow = r1 + 1;
+                } else {
+                    headerRow = data[r1 + 1];
+                    dataStartRow = r1 + 2;
+                }
                 dashboardData.collectionI.months = [];
                 if (headerRow) {
                     for (let c = 1; c < headerRow.length; c++) {
@@ -1417,8 +1437,7 @@
                 dashboardData.collectionI.case = [];
                 dashboardData.collectionI.other = [];
                 dashboardData.collectionI.ratio = [];
-                // 读取数据行（Row 2-5）
-                for (let r = r1 + 2; r < data.length; r++) {
+                for (let r = dataStartRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const type = String(row[0]).trim();
@@ -1434,7 +1453,6 @@
                     else if (type === '病例补件') dashboardData.collectionI.case = values;
                     else if (type === '其他补件') dashboardData.collectionI.other = values;
                     else if (type === '病例占比') {
-                        // 病例占比已经是百分比，需要乘以100
                         dashboardData.collectionI.ratio = values.map(v => v * 100);
                     }
                 }
@@ -1754,7 +1772,7 @@
                 blPrev = blValues[blValues.length - 2];
                 blChange = calculateMoM(blLatest, blPrev);
             }
-            updateKPICard('kpi-billing-monthly', blLatest !== null ? blLatest.toFixed(1) : '-', 'K', blChange);
+            updateKPICard('kpi-billing-monthly', blLatest !== null ? blLatest.toFixed(0) : '-', '', blChange);
             
             // Collection-I端补件量（最新月度 - 取total数组最后一个非空值）
             const clITotal = dashboardData.collectionI.total;
