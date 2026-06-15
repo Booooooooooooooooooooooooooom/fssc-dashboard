@@ -1134,10 +1134,13 @@
 
         // ========== Under Review Sheet ==========
         function parseUnderReviewData(data) {
+            console.log('Under Review数据行数:', data.length);
+            if (data.length > 0) console.log('Under Review第一行:', data[0]);
             // 区域1: Under Review金额明细（按年度）
             // 标题行: ['Under Review金额明细（单位：百万元）', 2023, 2024, 2025, 2026, Total]
             // 或: ['Under Review金额', '年份', 2023, 2024, ...]
             const r1 = findRowIndex(data, ['Under Review金额', 'under review金额', '金额明细'], 0);
+            console.log('Under Review金额明细行号:', r1);
             if (r1 >= 0) {
                 // 判断标题行是否包含列标题（年份）
                 const titleRow = data[r1];
@@ -1384,8 +1387,8 @@
                         const val = parseValue(row[c]);
                         values.push(val !== null ? val * 100 : 0);
                     }
-                    if (type === '驳回率') dashboardData.billingReject.rate = values;
-                    else if (type === 'Target' || type.includes('目标')) dashboardData.billingReject.target = values;
+                    if (type === '驳回率') dashboardData.billingReject.rate = values.map(v => parseFloat(v.toFixed(2)));
+                    else if (type === 'Target' || type.includes('目标')) dashboardData.billingReject.target = values.map(v => parseFloat(v.toFixed(2)));
                 }
             }
 
