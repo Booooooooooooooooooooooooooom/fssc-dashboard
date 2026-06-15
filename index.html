@@ -532,8 +532,16 @@
                 if (!row || row.length < 2) continue;
                 const moduleName = String(row[0] || '').trim();
                 const content = String(row[1] || '').trim();
-                const updateTime = row[2] ? String(row[2]).trim() : '';
+                let updateTime = row[2] ? String(row[2]).trim() : '';
                 const updater = row[3] ? String(row[3]).trim() : '';
+                // 转换飞书日期序列号为可读日期
+                if (/^\d{4,5}$/.test(updateTime)) {
+                    const dateNum = parseInt(updateTime);
+                    if (!isNaN(dateNum) && dateNum > 40000 && dateNum < 60000) {
+                        const date = new Date((dateNum - 25569) * 86400000);
+                        updateTime = date.getFullYear() + '/' + String(date.getMonth()+1).padStart(2,'0') + '/' + String(date.getDate()).padStart(2,'0');
+                    }
+                }
                 if (moduleName && content) {
                     remarks[moduleName] = { content, updateTime, updater };
                 }
