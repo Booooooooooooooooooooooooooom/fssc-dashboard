@@ -177,13 +177,6 @@
                 <div class="chart-card"><div class="chart-title">已预付未收货清理进度</div><div class="chart-container" id="chart-ap-prepaid-person"></div></div>
                 <div class="chart-card"><div class="chart-title">已预付未收货按区间分布</div><div class="chart-container" id="chart-ap-prepaid-range"></div></div>
             </div>
-            <div class="remark-section">
-                <textarea class="remark-input" id="remark-ap" placeholder="请输入AP运营数据的分析说明、异常情况或改进建议..."></textarea>
-                <div class="remark-actions">
-                    <button class="remark-btn save" onclick="saveRemark('ap')">保存备注</button>
-                    <button class="remark-btn clear" onclick="clearRemark('ap')">清空</button>
-                </div>
-            </div>
         </div>
         
         <!-- Treasury运营数据 -->
@@ -201,13 +194,6 @@
                 <div class="chart-card"><div class="chart-title">年度付款数据</div><div class="chart-container" id="chart-treasury-annual-payment"></div></div>
                 <div class="chart-card"><div class="chart-title">线下付款分类</div><div class="chart-container" id="chart-treasury-offline-category"></div></div>
                 <div class="chart-card"><div class="chart-title">不按期支付分类</div><div class="chart-container" id="chart-treasury-delay-category"></div></div>
-            </div>
-            <div class="remark-section">
-                <textarea class="remark-input" id="remark-treasury" placeholder="请输入Treasury运营数据的分析说明..."></textarea>
-                <div class="remark-actions">
-                    <button class="remark-btn save" onclick="saveRemark('treasury')">保存备注</button>
-                    <button class="remark-btn clear" onclick="clearRemark('treasury')">清空</button>
-                </div>
             </div>
         </div>
         
@@ -228,13 +214,6 @@
                 <div class="chart-card"><div class="chart-title">Under Review金额明细（百万元）</div><div class="chart-container" id="chart-settlement-ur-amount-yearly"></div></div>
                 <div class="chart-card"><div class="chart-title">Under Review数量明细（件）</div><div class="chart-container" id="chart-settlement-ur-count-yearly"></div></div>
             </div>
-            <div class="remark-section">
-                <textarea class="remark-input" id="remark-settlement" placeholder="请输入Settlement运营数据的分析说明..."></textarea>
-                <div class="remark-actions">
-                    <button class="remark-btn save" onclick="saveRemark('settlement')">保存备注</button>
-                    <button class="remark-btn clear" onclick="clearRemark('settlement')">清空</button>
-                </div>
-            </div>
         </div>
         
         <!-- Billing运营数据 -->
@@ -251,13 +230,6 @@
                 <div class="chart-card"><div class="chart-title">快递和E-mail寄送方式占比</div><div class="chart-container" id="chart-billing-ratio"></div></div>
                 <div class="chart-card"><div class="chart-title">账单处理时效</div><div class="chart-container" id="chart-billing-efficiency"></div></div>
                 <div class="chart-card"><div class="chart-title">驳回率</div><div class="chart-container" id="chart-billing-reject"></div></div>
-            </div>
-            <div class="remark-section">
-                <textarea class="remark-input" id="remark-billing" placeholder="请输入Billing运营数据的分析说明..."></textarea>
-                <div class="remark-actions">
-                    <button class="remark-btn save" onclick="saveRemark('billing')">保存备注</button>
-                    <button class="remark-btn clear" onclick="clearRemark('billing')">清空</button>
-                </div>
             </div>
         </div>
         
@@ -277,13 +249,6 @@
                 <div class="chart-card"><div class="chart-title">C端呼出电话接起情况</div><div class="chart-container" id="chart-collection-c-out"></div></div>
                 <div class="chart-card"><div class="chart-title">智能语音电话沟通量</div><div class="chart-container" id="chart-collection-c-ai"></div></div>
             </div>
-            <div class="remark-section">
-                <textarea class="remark-input" id="remark-collection" placeholder="请输入Collection运营数据的分析说明..."></textarea>
-                <div class="remark-actions">
-                    <button class="remark-btn save" onclick="saveRemark('collection')">保存备注</button>
-                    <button class="remark-btn clear" onclick="clearRemark('collection')">清空</button>
-                </div>
-            </div>
         </div>
         
         <!-- GL运营数据 -->
@@ -300,13 +265,6 @@
                 <div class="chart-card"><div class="chart-title">错误入账事项</div><div class="chart-container" id="chart-gl-error"></div></div>
                 <div class="chart-card"><div class="chart-title">月度账务量</div><div class="chart-container" id="chart-gl-monthly-volume"></div></div>
                 <div class="chart-card"><div class="chart-title">月度分时段处理账务分布</div><div class="chart-container" id="chart-gl-time-distribution"></div></div>
-            </div>
-            <div class="remark-section">
-                <textarea class="remark-input" id="remark-gl" placeholder="请输入GL运营数据的分析说明..."></textarea>
-                <div class="remark-actions">
-                    <button class="remark-btn save" onclick="saveRemark('gl')">保存备注</button>
-                    <button class="remark-btn clear" onclick="clearRemark('gl')">清空</button>
-                </div>
             </div>
         </div>
     </div>
@@ -555,51 +513,61 @@
             document.getElementById('analysis-all').innerHTML = html;
         }
         
-        // ========== 备注功能 ==========
-        function saveRemark(module) {
-            const input = document.getElementById(`remark-${module}`);
-            const content = input.value.trim();
-            if (!content) {
-                alert('请输入备注内容');
-                return;
+        // ========== 备注功能（从飞书表格加载）==========
+        const REMARK_MODULE_MAP = {
+            'ap': 'AP需关注事项',
+            'treasury': 'Treasury需关注事项',
+            'settlement': 'Settlement需关注事项',
+            'billing': 'Billing需关注事项',
+            'collection': 'Collection需关注事项',
+            'gl': 'GL需关注事项'
+        };
+
+        function parseRemarksData(data) {
+            const remarks = {};
+            if (!data || data.length < 2) return remarks;
+            // 跳过表头，从第1行开始读取
+            for (let i = 1; i < data.length; i++) {
+                const row = data[i];
+                if (!row || row.length < 2) continue;
+                const moduleName = String(row[0] || '').trim();
+                const content = String(row[1] || '').trim();
+                const updateTime = row[2] ? String(row[2]).trim() : '';
+                const updater = row[3] ? String(row[3]).trim() : '';
+                if (moduleName && content) {
+                    remarks[moduleName] = { content, updateTime, updater };
+                }
             }
-            const remarkData = {
-                content: content,
-                time: new Date().toLocaleString('zh-CN')
-            };
-            localStorage.setItem(`fssc_remark_${module}`, JSON.stringify(remarkData));
-            displayRemark(module, remarkData);
-            input.value = '';
-            alert('备注已保存');
+            return remarks;
         }
-        
-        function clearRemark(module) {
-            if (!confirm('确定要清空此备注吗？')) return;
-            localStorage.removeItem(`fssc_remark_${module}`);
-            document.getElementById(`remark-${module}`).value = '';
-            const display = document.getElementById(`display-remark-${module}`);
-            display.innerHTML = `
-                <div class="remark-display-content remark-empty">暂无备注</div>
-            `;
-        }
-        
+
         function loadAllRemarks() {
             const modules = ['ap', 'treasury', 'settlement', 'billing', 'collection', 'gl'];
+            const remarkSheet = dashboardData.remarks || {};
             modules.forEach(module => {
-                const saved = localStorage.getItem(`fssc_remark_${module}`);
-                if (saved) {
-                    displayRemark(module, JSON.parse(saved));
+                const key = REMARK_MODULE_MAP[module];
+                const data = remarkSheet[key];
+                if (data && data.content) {
+                    displayRemark(module, data);
+                } else {
+                    const display = document.getElementById(`display-remark-${module}`);
+                    if (display) {
+                        display.innerHTML = `<div class="remark-display-content remark-empty">暂无备注</div>`;
+                    }
                 }
             });
         }
-        
+
         function displayRemark(module, data) {
             const display = document.getElementById(`display-remark-${module}`);
+            if (!display) return;
+            const timeStr = data.updateTime ? `<div class="remark-display-time">更新时间：${escapeHtml(data.updateTime)}${data.updater ? ' | 更新人：' + escapeHtml(data.updater) : ''}</div>` : '';
             display.innerHTML = `
-                <div class="remark-display-content">${escapeHtml(data.content)}</div>
+                <div class="remark-display-content">${escapeHtml(data.content).replace(/\n/g, '<br>')}</div>
+                ${timeStr}
             `;
         }
-        
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -626,6 +594,7 @@
                     try { if (sheets['Collection-I端']) parseCollectionIData(sheets['Collection-I端']); } catch(e) { console.error('Collection-I解析错误:', e); }
                     try { if (sheets['Collection-C端']) parseCollectionCData(sheets['Collection-C端']); } catch(e) { console.error('Collection-C解析错误:', e); }
                     try { if (sheets['GL']) parseGLData(sheets['GL']); } catch(e) { console.error('GL解析错误:', e); }
+                    try { if (sheets['备注']) dashboardData.remarks = parseRemarksData(sheets['备注']); } catch(e) { console.error('备注解析错误:', e); }
 
                     updateKPIs();
                     updateAllCharts();
