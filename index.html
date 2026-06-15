@@ -490,10 +490,11 @@
                 html += analysisItemHTML('Treasury付款笔数', (curOnline + curOffline).toFixed(0), ' 笔', calculateMoM(curOnline + curOffline, prevOnline + prevOffline));
             }
             
-            // Treasury - 不按期支付
-            const td = dashboardData.treasuryDelayCategory.values;
-            if (td.length >= 2) {
-                html += analysisItemHTML('不按期支付', td[td.length-1], ' 笔', calculateMoM(td[td.length-1], td[td.length-2]));
+            // Treasury - 不按期支付数量（取不按期支付图表最新月份数据）
+            const tdMonths = dashboardData.treasuryDelay.months;
+            const tdValues = dashboardData.treasuryDelay.values;
+            if (tdValues.length >= 2) {
+                html += analysisItemHTML('不按期支付', tdValues[tdValues.length-1], ' 笔', calculateMoM(tdValues[tdValues.length-1], tdValues[tdValues.length-2]));
             }
             
             // Settlement - 使用settlementUnderReview最新两个月的数据
@@ -686,11 +687,15 @@
                     if (row[c] != null) {
                         const val = String(row[c]).trim();
                         for (const kw of keywords) {
-                            if (val.includes(kw)) return r;
+                            if (val.includes(kw)) {
+                                console.log('findRowIndex匹配:', kw, '在行', r, '列', c, '值:', val);
+                                return r;
+                            }
                         }
                     }
                 }
             }
+            console.log('findRowIndex未找到:', keywords);
             return -1;
         }
 
