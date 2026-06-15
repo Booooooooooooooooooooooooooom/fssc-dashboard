@@ -225,8 +225,8 @@
                 <div class="chart-card"><div class="chart-title">月度处理账单量(K)</div><div class="chart-container" id="chart-settlement-monthly"></div></div>
                 <div class="chart-card"><div class="chart-title">核销账单月度处理时效</div><div class="chart-container" id="chart-settlement-efficiency"></div></div>
                 <div class="chart-card"><div class="chart-title">月度分时段处理核销账单分布</div><div class="chart-container" id="chart-settlement-distribution"></div></div>
-                <div class="chart-card full-width"><div class="chart-title">Under Review金额明细（单位：百万元）</div><div class="chart-container" id="chart-settlement-ur-amount-yearly"></div></div>
-                <div class="chart-card full-width"><div class="chart-title">UnderReview数量明细（按年度）</div><div class="chart-container" id="chart-settlement-ur-count-yearly"></div></div>
+                <div class="chart-card"><div class="chart-title">Under Review金额明细（百万元）</div><div class="chart-container" id="chart-settlement-ur-amount-yearly"></div></div>
+                <div class="chart-card"><div class="chart-title">Under Review数量明细（件）</div><div class="chart-container" id="chart-settlement-ur-count-yearly"></div></div>
             </div>
             <div class="remark-section">
                 <textarea class="remark-input" id="remark-settlement" placeholder="请输入Settlement运营数据的分析说明..."></textarea>
@@ -493,8 +493,11 @@
             // Treasury - 不按期支付数量（取不按期支付图表最新月份数据）
             const tdMonths = dashboardData.treasuryDelay.months;
             const tdValues = dashboardData.treasuryDelay.values;
-            if (tdValues.length >= 2) {
-                html += analysisItemHTML('不按期支付', tdValues[tdValues.length-1], ' 笔', calculateMoM(tdValues[tdValues.length-1], tdValues[tdValues.length-2]));
+            console.log('KPI不按期支付 - months:', tdMonths, 'values:', tdValues);
+            if (tdValues.length >= 1) {
+                const latestVal = tdValues[tdValues.length-1];
+                const prevVal = tdValues.length >= 2 ? tdValues[tdValues.length-2] : null;
+                html += analysisItemHTML('不按期支付', latestVal, ' 笔', prevVal !== null ? calculateMoM(latestVal, prevVal) : null);
             }
             
             // Settlement - 使用settlementUnderReview最新两个月的数据
@@ -1139,24 +1142,44 @@
 
         // ========== Under Review Sheet ==========
         function parseUnderReviewData(data) {
+            console.log('=== Under Review解析开始 ===');
             console.log('Under Review数据行数:', data.length);
-            if (data.length > 0) console.log('Under Review第一行:', data[0]);
+            if (data.length > 0) {
+                console.log('Under Review第一行:', data[0]);
+                console.log('第一行第0列:', data[0][0], '类型:', typeof data[0][0]);
+            }
             // 区域1: Under Review金额明细（按年度）
-            // 标题行: ['Under Review金额明细（单位：百万元）', 2023, 2024, 2025, 2026, Total]
-            // 或: ['Under Review金额', '年份', 2023, 2024, ...]
-            const r1 = findRowIndex(data, ['Under Review金额', 'under review金额', '金额明细', 'under review账单金额', '账单金额'], 0);
+            // 标题行: ['under review账单金额', 'Baseline(202503)', 202601, 202602, ...]
+            // 如果第一行就是标题行，直接使用
+            let r1 = -1;
+            if (data.length > 0 && data[0] && data[0][0]) {
+                const firstVal = String(data[0][0]).trim().toLowerCase();
+                console.log('检查第一行:', firstVal);
+                if (firstVal.includes('under review') || firstVal.includes('账单金额')) {
+                    r1 = 0;
+                    console.log('使用第一行作为标题行:', r1);
+                }
+            }
+            if (r1 < 0) {
+                r1 = findRowIndex(data, ['under review账单金额', '账单金额', 'Under Review金额', 'under review金额', '金额明细'], 0);
+            }
             console.log('Under Review金额明细行号:', r1);
             if (r1 >= 0) {
-                // 判断标题行是否包含列标题（年份）
+                // 判断标题行是否包含列标题（年份/月份）
                 const titleRow = data[r1];
                 let hasYearsInTitle = false;
                 if (titleRow) {
                     for (let c = 1; c < titleRow.length; c++) {
-                        if (titleRow[c] != null && /^20\d{2}$/.test(String(titleRow[c]).trim())) {
-                            hasYearsInTitle = true; break;
+                        if (titleRow[c] != null) {
+                            const val = String(titleRow[c]).trim();
+                            // 匹配4位年份(2026)或6位年月(202601)或Baseline格式
+                            if (/^20\d{2}$/.test(val) || /^20\d{4}$/.test(val) || /baseline/i.test(val)) {
+                                hasYearsInTitle = true; break;
+                            }
                         }
                     }
                 }
+                console.log('金额明细hasYearsInTitle:', hasYearsInTitle, '标题行:', titleRow);
                 let headerRow, dataStartRow;
                 if (hasYearsInTitle) {
                     // 标题行包含年份，直接从标题行读取
@@ -1175,34 +1198,42 @@
                 }
                 dashboardData.settlementURAmountYearly.seriesNames = [];
                 dashboardData.settlementURAmountYearly.series = [];
+                console.log('金额明细dataStartRow:', dataStartRow, 'periods:', dashboardData.settlementURAmountYearly.periods);
                 for (let r = dataStartRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '' || label === '年份' || label === '时间') continue;
                     // 遇到下一个区域标题时停止
-                    if (findRowIndex(data, ['Under Review数量', 'under review数量', '数量明细'], r) === r) break;
+                    if (findRowIndex(data, ['Under Review数量', 'under review数量', '数量明细', 'under review账单数量'], r) === r) break;
                     const seriesData = [];
                     for (let c = 1; c < row.length && c <= dashboardData.settlementURAmountYearly.periods.length; c++) {
                         seriesData.push(parseValue(row[c]) || 0);
                     }
+                    console.log('金额明细读取行:', r, 'label:', label, 'data:', seriesData);
                     dashboardData.settlementURAmountYearly.seriesNames.push(label);
                     dashboardData.settlementURAmountYearly.series.push({ name: label, data: seriesData });
                 }
+                console.log('金额明细最终series:', dashboardData.settlementURAmountYearly.seriesNames);
             }
 
             // 区域2: Under Review数量明细（按年度）
             const r2 = findRowIndex(data, ['Under Review数量', 'under review数量', '数量明细', 'under review账单数量', '账单数量'], r1 >= 0 ? r1 + 1 : 0);
+            console.log('Under Review数量明细行号:', r2);
             if (r2 >= 0) {
                 const titleRow = data[r2];
                 let hasYearsInTitle = false;
                 if (titleRow) {
                     for (let c = 1; c < titleRow.length; c++) {
-                        if (titleRow[c] != null && /^20\d{2}$/.test(String(titleRow[c]).trim())) {
-                            hasYearsInTitle = true; break;
+                        if (titleRow[c] != null) {
+                            const val = String(titleRow[c]).trim();
+                            if (/^20\d{2}$/.test(val) || /^20\d{4}$/.test(val) || /baseline/i.test(val)) {
+                                hasYearsInTitle = true; break;
+                            }
                         }
                     }
                 }
+                console.log('数量明细hasYearsInTitle:', hasYearsInTitle, '标题行:', titleRow);
                 let headerRow, dataStartRow;
                 if (hasYearsInTitle) {
                     headerRow = titleRow;
@@ -1219,19 +1250,21 @@
                 }
                 dashboardData.settlementURCountYearly.seriesNames = [];
                 dashboardData.settlementURCountYearly.series = [];
+                console.log('数量明细dataStartRow:', dataStartRow, 'periods:', dashboardData.settlementURCountYearly.periods);
                 for (let r = dataStartRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
                     if (label === '' || label === '年份' || label === '时间') continue;
-                    if (label === '合计' || label === '总计' || label === 'Total') continue;
                     const seriesData = [];
                     for (let c = 1; c < row.length && c <= dashboardData.settlementURCountYearly.periods.length; c++) {
                         seriesData.push(parseValue(row[c]) || 0);
                     }
+                    console.log('数量明细读取行:', r, 'label:', label, 'data:', seriesData);
                     dashboardData.settlementURCountYearly.seriesNames.push(label);
                     dashboardData.settlementURCountYearly.series.push({ name: label, data: seriesData });
                 }
+                console.log('数量明细最终series:', dashboardData.settlementURCountYearly.seriesNames);
             }
 
             // 兼容旧数据结构（用于KPI和简单图表）
@@ -1252,6 +1285,7 @@
             if (dashboardData.settlementURAmountYearly.periods && dashboardData.settlementURAmountYearly.periods.length > 0) {
                 dashboardData.settlementUnderReview.periods = dashboardData.settlementURAmountYearly.periods;
             }
+            console.log('Under Review解析完成 - amount:', dashboardData.settlementUnderReview.amount, 'count:', dashboardData.settlementUnderReview.count);
         }
 
         // ========== Billing Sheet（4个图表）==========
