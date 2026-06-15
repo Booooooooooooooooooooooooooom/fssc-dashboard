@@ -381,15 +381,21 @@
                 try {
                     const parsed = JSON.parse(savedData);
                     Object.assign(dashboardData, parsed);
-                    document.getElementById('dataStatus').textContent = '已加载缓存数据';
+                    document.getElementById('dataStatus').textContent = '已加载缓存数据（点击刷新获取最新）';
                     updateKPIs();
                     updateAllCharts();
                     updateAnalysisSection();
                     loadAllRemarks();
                 } catch(e) { /* 恢复缓存数据失败 */ }
+            } else {
+                // 没有缓存，使用默认数据
+                document.getElementById('dataStatus').textContent = '已加载默认数据（点击刷新获取最新）';
+                updateKPIs();
+                updateAllCharts();
+                updateAnalysisSection();
+                loadAllRemarks();
             }
-            // 从API加载最新数据
-            refreshFromAPI();
+            // 不再自动调用API，改为手动刷新
         });
         
         // ========== 环比分析功能 ==========
