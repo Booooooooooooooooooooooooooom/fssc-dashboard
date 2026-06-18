@@ -582,47 +582,39 @@
             return div.innerHTML;
         }
         
-        // API base URL - same origin (served by SCF)
-        const API_BASE = 'https://1439227087-gb0j52z380.ap-chengdu.tencentscf.com';
-
+        // 数据加载方式：从 data.json 加载（GitHub Actions 定时同步）
         async function refreshFromAPI() {
-            document.getElementById('dataStatus').textContent = '正在从飞书加载数据...';
+            document.getElementById('dataStatus').textContent = '正在加载数据...';
             document.getElementById('loadingOverlay').classList.add('active');
             try {
-                const resp = await fetch(API_BASE + '/api/fssc/data');
-                const result = await resp.json();
-                if (result.code === 0 && result.data) {
-                    const sheets = result.data;
-                    dashboardData = JSON.parse(JSON.stringify(defaultData));
-                    try { if (sheets['AP']) parseAPData(sheets['AP']); } catch(e) { console.error('AP解析错误:', e); }
-                    try { if (sheets['Treasury']) parseTreasuryData(sheets['Treasury']); } catch(e) { console.error('Treasury解析错误:', e); }
-                    try { if (sheets['Settlement']) parseSettlementData(sheets['Settlement']); } catch(e) { console.error('Settlement解析错误:', e); }
-                    try { if (sheets['under review']) parseUnderReviewData(sheets['under review']); } catch(e) { console.error('UnderReview解析错误:', e); }
-                    try { if (sheets['Billing']) parseBillingData(sheets['Billing']); } catch(e) { console.error('Billing解析错误:', e); }
-                    try { if (sheets['Collection-I端']) parseCollectionIData(sheets['Collection-I端']); } catch(e) { console.error('Collection-I解析错误:', e); }
-                    try { if (sheets['Collection-C端']) parseCollectionCData(sheets['Collection-C端']); } catch(e) { console.error('Collection-C解析错误:', e); }
-                    try { if (sheets['GL']) parseGLData(sheets['GL']); } catch(e) { console.error('GL解析错误:', e); }
-                    try { if (sheets['备注']) dashboardData.remarks = parseRemarksData(sheets['备注']); } catch(e) { console.error('备注解析错误:', e); }
+                const resp = await fetch('data.json?t=' + Date.now());
+                const sheets = await resp.json();
+                dashboardData = JSON.parse(JSON.stringify(defaultData));
+                try { if (sheets['AP']) parseAPData(sheets['AP']); } catch(e) { console.error('AP解析错误:', e); }
+                try { if (sheets['Treasury']) parseTreasuryData(sheets['Treasury']); } catch(e) { console.error('Treasury解析错误:', e); }
+                try { if (sheets['Settlement']) parseSettlementData(sheets['Settlement']); } catch(e) { console.error('Settlement解析错误:', e); }
+                try { if (sheets['under review']) parseUnderReviewData(sheets['under review']); } catch(e) { console.error('UnderReview解析错误:', e); }
+                try { if (sheets['Billing']) parseBillingData(sheets['Billing']); } catch(e) { console.error('Billing解析错误:', e); }
+                try { if (sheets['Collection-I端']) parseCollectionIData(sheets['Collection-I端']); } catch(e) { console.error('Collection-I解析错误:', e); }
+                try { if (sheets['Collection-C端']) parseCollectionCData(sheets['Collection-C端']); } catch(e) { console.error('Collection-C解析错误:', e); }
+                try { if (sheets['GL']) parseGLData(sheets['GL']); } catch(e) { console.error('GL解析错误:', e); }
+                try { if (sheets['备注']) dashboardData.remarks = parseRemarksData(sheets['备注']); } catch(e) { console.error('备注解析错误:', e); }
 
-                    updateKPIs();
-                    updateAllCharts();
-                    updateAnalysisSection();
-                    loadAllRemarks();
+                updateKPIs();
+                updateAllCharts();
+                updateAnalysisSection();
+                loadAllRemarks();
 
-                    try {
-                        localStorage.setItem('fssc_dashboard_data', JSON.stringify(dashboardData));
-                    } catch(e) { /* 缓存失败 */ }
+                try {
+                    localStorage.setItem('fssc_dashboard_data', JSON.stringify(dashboardData));
+                } catch(e) { /* 缓存失败 */ }
 
-                    const now = new Date();
-                    const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
-                    document.getElementById('dataStatus').textContent = '数据已更新 (' + timeStr + ')';
-                } else {
-                    throw new Error(result.msg || 'API error');
-                }
+                const now = new Date();
+                const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+                document.getElementById('dataStatus').textContent = '数据已更新 (' + timeStr + ')';
             } catch(e) {
-                console.error('API加载错误详情:', e);
-                console.error('错误堆栈:', e.stack);
-                document.getElementById('dataStatus').textContent = 'API 加载失败: ' + e.message;
+                console.error('数据加载错误:', e);
+                document.getElementById('dataStatus').textContent = '数据加载失败: ' + e.message;
             } finally {
                 document.getElementById('loadingOverlay').classList.remove('active');
             }
@@ -1616,14 +1608,38 @@
             }
         }
 
-        // ========== GL Sheet（3个图表）==========
+        // ========== GL Sheet（4个图表）==========
         function parseGLData(data) {
             // 所有区域纵向排列，扫描各区域标题行
+
+            // ========== 区域0: 结账时间/关账时效 - Row 0-6, Col 0-1 ==========
+            // 标题行: ['关账时效', '天数', ...] 或 ['结账时间', '天数', ...]
+            // 数据行: [2022, 6], [2023, 4], ..., [2605, 3]
+            const r0 = findRowIndex(data, ['关账时效', '结账时间', 'GL关账时效'], 0);
+            if (r0 >= 0) {
+                let startRow = skipHeaderIfNeeded(data, r0 + 1, ['年份', '时间', '月份']);
+                dashboardData.glTime.months = [];
+                dashboardData.glTime.days = [];
+                for (let r = startRow; r < data.length; r++) {
+                    const row = data[r];
+                    if (!row || row[0] == null) continue;
+                    const label = String(row[0]).trim();
+                    if (label === '' || label === '年份' || label === '时间' || label === '月份') continue;
+                    // 跳过合计行
+                    if (label === '合计' || label === '总计' || label === 'Total') continue;
+                    // 遇到下一个区域标题时停止
+                    if (findRowIndex(data, ['GL错误入账事项'], r) === r) break;
+                    if (findRowIndex(data, ['GL月度账务量'], r) === r) break;
+                    if (findRowIndex(data, ['月度分时段处理账务分布'], r) === r) break;
+                    dashboardData.glTime.months.push(label);
+                    dashboardData.glTime.days.push(parseValue(row[1]) || 0);
+                }
+            }
 
             // ========== 区域1: GL错误入账事项 - Row 0-6, Col 0-1 ==========
             // 标题行: ['GL错误入账事项', '错账数量', ...]
             // 数据行: [2512, 4], [2601, 3], ..., [2605, 1]
-            const r1 = findRowIndex(data, ['GL错误入账事项'], 0);
+            const r1 = findRowIndex(data, ['GL错误入账事项'], r0 >= 0 ? r0 + 1 : 0);
             if (r1 >= 0) {
                 let startRow = skipHeaderIfNeeded(data, r1 + 1, ['月份', '时间']);
                 dashboardData.glError.months = [];
@@ -1636,6 +1652,7 @@
                     // 跳过合计行
                     if (label === '合计' || label === '总计' || label === 'Total') continue;
                     // 遇到下一个区域标题时停止
+                    if (findRowIndex(data, ['关账时效', '结账时间', 'GL关账时效'], r) === r) break;
                     if (findRowIndex(data, ['GL月度账务量'], r) === r) break;
                     if (findRowIndex(data, ['月度分时段处理账务分布'], r) === r) break;
                     dashboardData.glError.months.push(label);
@@ -1662,6 +1679,7 @@
                     const label = String(row[0]).trim();
                     if (label === '' || label === '月份' || label === '时间') continue;
                     // 遇到下一个区域标题时停止
+                    if (findRowIndex(data, ['关账时效', '结账时间', 'GL关账时效'], r) === r) break;
                     if (findRowIndex(data, ['月度分时段处理账务分布'], r) === r) break;
                     dashboardData.glMonthlyVolume.months.push(label);
                     dashboardData.glMonthlyVolume.daily.push(parseValue(row[1]) || 0);
@@ -1690,6 +1708,10 @@
                     if (label === '' || label === '月份' || label === '时间') continue;
                     // 跳过合计行
                     if (label === '合计' || label === '总计' || label === 'Total') continue;
+                    // 遇到下一个区域标题时停止
+                    if (findRowIndex(data, ['关账时效', '结账时间', 'GL关账时效'], r) === r) break;
+                    if (findRowIndex(data, ['GL错误入账事项'], r) === r) break;
+                    if (findRowIndex(data, ['GL月度账务量'], r) === r) break;
                     dashboardData.glTimeDistribution.months.push(label);
                     dashboardData.glTimeDistribution.daily.push(parseValue(row[1]) || 0);
                     dashboardData.glTimeDistribution.preClose.push(parseValue(row[2]) || 0);
