@@ -582,13 +582,19 @@
             return div.innerHTML;
         }
         
-        // 数据加载方式：从 data.json 加载（GitHub Actions 定时同步）
+        // 数据加载方式：从腾讯云 SCF API 加载
+        const API_BASE = 'https://1439227087-gb0j52z380.ap-chengdu.tencentscf.com';
+
         async function refreshFromAPI() {
-            document.getElementById('dataStatus').textContent = '正在加载数据...';
+            document.getElementById('dataStatus').textContent = '正在从飞书加载数据...';
             document.getElementById('loadingOverlay').classList.add('active');
             try {
-                const resp = await fetch('data.json?t=' + Date.now());
-                const sheets = await resp.json();
+                const resp = await fetch(API_BASE + '/api/fssc/data');
+                const result = await resp.json();
+                if (result.code !== 0 || !result.data) {
+                    throw new Error(result.msg || 'API error');
+                }
+                const sheets = result.data;
                 dashboardData = JSON.parse(JSON.stringify(defaultData));
                 try { if (sheets['AP']) parseAPData(sheets['AP']); } catch(e) { console.error('AP解析错误:', e); }
                 try { if (sheets['Treasury']) parseTreasuryData(sheets['Treasury']); } catch(e) { console.error('Treasury解析错误:', e); }
@@ -1616,14 +1622,17 @@
             // 标题行: ['关账时效', '天数', ...] 或 ['结账时间', '天数', ...]
             // 数据行: [2022, 6], [2023, 4], ..., [2605, 3]
             const r0 = findRowIndex(data, ['关账时效', '结账时间', 'GL关账时效'], 0);
+            console.log('GL区域0-结账时间行号:', r0);
             if (r0 >= 0) {
                 let startRow = skipHeaderIfNeeded(data, r0 + 1, ['年份', '时间', '月份']);
+                console.log('GL区域0-开始行:', startRow, '标题行:', data[r0]);
                 dashboardData.glTime.months = [];
                 dashboardData.glTime.days = [];
                 for (let r = startRow; r < data.length; r++) {
                     const row = data[r];
                     if (!row || row[0] == null) continue;
                     const label = String(row[0]).trim();
+                    console.log('GL区域0-读取行:', r, 'label:', label, 'row:', row);
                     if (label === '' || label === '年份' || label === '时间' || label === '月份') continue;
                     // 跳过合计行
                     if (label === '合计' || label === '总计' || label === 'Total') continue;
@@ -1634,6 +1643,7 @@
                     dashboardData.glTime.months.push(label);
                     dashboardData.glTime.days.push(parseValue(row[1]) || 0);
                 }
+                console.log('GL区域0-结果:', dashboardData.glTime.months, dashboardData.glTime.days);
             }
 
             // ========== 区域1: GL错误入账事项 - Row 0-6, Col 0-1 ==========
