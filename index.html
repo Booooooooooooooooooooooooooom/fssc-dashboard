@@ -589,7 +589,7 @@
             document.getElementById('dataStatus').textContent = '正在从飞书加载数据...';
             document.getElementById('loadingOverlay').classList.add('active');
             try {
-                const resp = await fetch(API_BASE + '/api/fssc/data');
+                const resp = await fetch(API_BASE + '/api/fssc/data?t=' + Date.now());
                 const result = await resp.json();
                 if (result.code !== 0 || !result.data) {
                     throw new Error(result.msg || 'API error');
