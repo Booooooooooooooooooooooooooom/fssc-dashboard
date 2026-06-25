@@ -618,6 +618,9 @@
                 const now = new Date();
                 const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
                 document.getElementById('dataStatus').textContent = '数据已更新 (' + timeStr + ')';
+
+                // 触发群消息通知（静默调用，不阻塞）
+                fetch(API_BASE + '/api/fssc/notify?t=' + Date.now()).catch(e => console.log('Notify skipped:', e));
             } catch(e) {
                 console.error('数据加载错误:', e);
                 document.getElementById('dataStatus').textContent = '数据加载失败: ' + e.message;
