@@ -619,12 +619,8 @@
                 const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
                 document.getElementById('dataStatus').textContent = '数据已更新 (' + timeStr + ')';
 
-                // 手动刷新后发送群消息通知（POST方式防止爬虫误触发）
-                fetch(API_BASE + '/api/fssc/notify?t=' + Date.now(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ source: 'dashboard' })
-                }).catch(e => console.log('Notify skipped:', e));
+                // 手动刷新后发送群消息通知
+                fetch(API_BASE + '/api/fssc/notify?t=' + Date.now()).catch(e => console.log('Notify skipped:', e));
             } catch(e) {
                 console.error('数据加载错误:', e);
                 document.getElementById('dataStatus').textContent = '数据加载失败: ' + e.message;
